@@ -1,0 +1,19 @@
+node_modules/
+lib/
+dist-site/
+dist/
+assets/
+.probe-cache/
+.npm-cache/
+*.tgz
+*.log
+.DS_Store
+
+# 逆向参考素材（第三方源码/元模型）与本地抓取数据：不进仓库、不进包
+refer/
+catalog/
+site/index.html.bak
+
+# 构建产物与探针残留（与 lib/ 同类，发版脚本重建）
+client/
+.layout-probe/

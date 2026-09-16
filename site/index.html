@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Plugin Galaxy · DSH 可视化插件星系</title>
+<meta name="description" content="DeepSeek Harness 的可视化插件星系：逛一逛，点一下，装好。" />
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding: 4rem 1.5rem;
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, #2a2350 0%, #0b0b14 60%, #07070d 100%);
+    color: #eceaf6;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  .badge {
+    display: inline-block; padding: .25rem .7rem; border-radius: 999px;
+    border: 1px solid #4a4270; background: #191632; color: #b9b2e6;
+    font-size: .8rem; letter-spacing: .04em;
+  }
+  h1 { font-size: clamp(2rem, 6vw, 3.25rem); line-height: 1.1; margin: 1.25rem 0 .5rem; }
+  h1 span { background: linear-gradient(92deg, #8f7bff, #4fd1c5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { font-size: 1.15rem; color: #b6b1cf; max-width: 48ch; }
+  h2 { margin-top: 3rem; font-size: 1.15rem; letter-spacing: .02em; color: #cfc9ea; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .9rem;
+  }
+  pre {
+    background: #12111f; border: 1px solid #272341; border-radius: 12px;
+    padding: 1rem 1.15rem; overflow-x: auto;
+  }
+  ul { padding-left: 1.1rem; }
+  li { margin: .35rem 0; color: #c9c4e2; }
+  footer { margin-top: 4rem; color: #77719a; font-size: .85rem; }
+  a { color: #8f7bff; }
+</style>
+</head>
+<body>
+<main>
+  <span class="badge">dsh-plugin-galaxy · v__VERSION__</span>
+  <h1>Plugin <span>Galaxy</span></h1>
+  <p class="lede">
+    DeepSeek Harness 的可视化插件星系：逛一逛，点一下，装好。<br />
+    A visual plugin galaxy inside DeepSeek Harness — browse, search, and one-click install community plugins.
+  </p>
+
+  <h2>安装 / Install</h2>
+  <pre><code>dsh plugin add dsh-plugin-galaxy</code></pre>
+  <p>安装后在宿主设置对话框左侧打开 <strong>Plugin Galaxy</strong> 即可。</p>
+
+  <h2>它做什么 / What it does</h2>
+  <ul>
+    <li><strong>Discover</strong> — 浏览 curated catalog，搜索、筛选、兼容性预判，一键安装</li>
+    <li><strong>Installed</strong> — 启停 / 更新 / 卸载 / 备注 / 分组 / 收藏 / 查看更新记录</li>
+    <li><strong>Favorites</strong> — 收藏待装插件</li>
+    <li><strong>Themes</strong> — 互斥激活主题型插件</li>
+    <li><strong>Operations</strong> — 变更操作生命周期、取消与回滚</li>
+    <li><strong>Diagnostics</strong> — 包清单诊断与脱敏日志导出</li>
+    <li><strong>Settings</strong> — 备份 / 恢复 / WebDAV / Gist / 区域 / 代理 / 通道 / 重启 / 自我卸载</li>
+  </ul>
+
+  <h2>设计契约 / Design contract</h2>
+  <p>
+    服务端与客户端各自有一份自持契约：<code>docs/implementation-contract.md</code>（路由、对象、规则、状态文件）
+    与 <code>docs/client-contract.md</code>（槽位、组件、文案、布局）；模块与能力的对应关系见
+    <code>docs/spec-implementation-mapping.md</code>。
+  </p>
+
+  <footer>MIT licensed · 由 <code>dsh-plugin-galaxy</code> 站点构建脚本生成 / built by <code>scripts/build-site.mjs</code></footer>
+</main>
+</body>
+</html>

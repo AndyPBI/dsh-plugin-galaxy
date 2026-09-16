@@ -1,0 +1,55 @@
+name: ci
+
+# CI verification gate: typecheck, build, the desensitization/compliance scan,
+# the packaged-artifact check and the test suite. Every step is a documented npm
+# script, so a local `npm run release` and this workflow cannot drift apart.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (server + client)
+        run: npm run typecheck
+
+      - name: Build (tsc + client bundle)
+        run: npm run build
+
+      - name: Desensitization / compliance gate
+        run: npm run check:desensitization
+
+      - name: Verify the packaged artifact
+        run: npm run verify:dist
+
+      - name: Client bundle smoke (loader facade + render)
+        run: npm run smoke:client
+
+      - name: Test
+        run: npm test
+
+      - name: Install smoke against a DSH checkout
+        run: npm run smoke:install
+        # Skips cleanly (exit 0) when no checkout is available.
+
+      - name: Build the static site
+        run: npm run build:site
+
+      - name: Validate the catalog payload
+        run: npm run validate:registry
+        continue-on-error: true
+        # The live catalog is a third-party endpoint; a network hiccup must not
+        # fail the build gate. A malformed payload still shows up in the log.

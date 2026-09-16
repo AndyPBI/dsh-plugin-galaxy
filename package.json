@@ -1,0 +1,108 @@
+{
+  "name": "dsh-plugin-galaxy",
+  "description": "Plugin Galaxy — visual plugin marketplace inside DeepSeek Harness: browse, search, and one-click install community plugins. · DSH 可视化插件星系：逛一逛，点一下，装好。",
+  "version": "0.1.27",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "license": "MIT",
+  "author": "AndyPBI <dalianyunhai@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndyPBI/dsh-plugin-galaxy.git"
+  },
+  "homepage": "https://github.com/AndyPBI/dsh-plugin-galaxy#readme",
+  "bugs": {
+    "url": "https://github.com/AndyPBI/dsh-plugin-galaxy/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "marketplace",
+    "market",
+    "galaxy",
+    "plugin-manager"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "build": "tsc -p tsconfig.json && node scripts/fix-declaration-imports.mjs && npm run build:client",
+    "build:client": "tsdown",
+    "fix:declarations": "node scripts/fix-declaration-imports.mjs",
+    "verify:dist": "node scripts/verify-dist.mjs",
+    "smoke:install": "node scripts/install-smoke.mjs",
+    "smoke:client": "node scripts/client-smoke.mjs",
+    "preinstall-check": "npm run build && npm run verify:dist && npm run smoke:client && npm test",
+    "pack": "npm run verify:dist && npm pack",
+    "release": "npm run preinstall-check && npm run check:desensitization && npm run check:host-surface && npm run check:host-settings && npm run check:layout && npm run pack",
+    "test": "vitest run",
+    "validate:registry": "node scripts/validate-registry.mjs",
+    "build:site": "node scripts/build-site.mjs",
+    "check:host-settings": "node scripts/host-settings-check.mjs",
+    "check:layout": "node scripts/layout-check.mjs",
+    "check:host-surface": "node scripts/check-host-surface.mjs",
+    "check:site-catalog": "node scripts/check-site-catalog.mjs",
+    "check:desensitization": "node scripts/check-desensitization.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "undici": "^7.29.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web"
+    },
+    "hostVersion": ">=0.1.5-alpha.1",
+    "engines": {
+      "dsh": ">=0.1.5-alpha.1"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "client",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.3",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
+    "jsdom": "^25.0.1",
+    "lightningcss": "^1.33.0",
+    "react": "^18.3.1",
+    "react-dom": "~18.3.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.8.3",
+    "vitest": "^3.0.5"
+  }
+}
