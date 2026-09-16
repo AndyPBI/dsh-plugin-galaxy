@@ -17,3 +17,7 @@ site/index.html.bak
 # 构建产物与探针残留（与 lib/ 同类，发版脚本重建）
 /client/
 /.layout-probe/
+
+# 内部工作文档：只在本地保留，不进仓库
+/plantodo.md
+/docs/pre-install-audit.md

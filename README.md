@@ -100,7 +100,7 @@ npm run smoke:client       # 按 __ModuleLoader__ 契约求值客户端 bundle �
 npm run smoke:install      # 真实 cordis + 真实 host webserver 下的安装仿真（需 DSH checkout，可 --checkout 指定）
 ```
 
-审计结论、宿主契约核对与已知项见 [`docs/pre-install-audit.md`](docs/pre-install-audit.md)。
+本仓库的发版门禁（`npm run release` 的每一步）与宿主契约核对结论都在 `scripts/` 与 `docs/host-patches.md` 里，可自行复跑。
 
 ## 4. 数据对象（物理文件）
 
@@ -163,7 +163,6 @@ POST /dsh-galaxy/api/v1/cancelling        { operationId }
 | 客户端契约：宿主槽位、组件结构、文案与布局约束 | `docs/client-contract.md` |
 | 与官网页面的联动（目录格式、推荐块、深链） | `docs/site-linkage.md` |
 | 宿主补丁清单与核对方式 | `docs/host-patches.md` |
-| 安装前审计（已修缺陷 A1–A12 与各道门禁） | `docs/pre-install-audit.md` |
 
 ## 8. 许可与作者
 

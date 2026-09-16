@@ -227,7 +227,7 @@ CSS 变量**不会报错**：写了一个宿主没定义的 `--dsw-alias-*` 名�
 
 这类缺陷**没有排版引擎就看不见**，因此有两道防线：
 `tests/host-contract.test.ts` 静态断言上述规则存在；`npm run check:layout` 用 Chrome headless 真实测量
-标签行框数与面板溢出（并保留"修复前"对照）。详见 `docs/pre-install-audit.md` §2 A7。
+标签行框数与面板溢出（并保留"修复前"对照）。由 `npm run check:layout`（真 Chrome 测量）守着。
 ### 6.3 变更请求必须有尽头（A8 的客户端一半）
 
 `send()` 是裸 `fetch`，没有超时；服务端在极端情况下也可能永不返回（子进程被杀后 `close` 事件不来）。

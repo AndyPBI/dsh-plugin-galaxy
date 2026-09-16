@@ -13,7 +13,7 @@ MIT-licensed DSH plugin marketplace:
 No source file from that project is copied into this repository. Its internal
 identifier systems — table, object, function, endpoint, entry, rule and module
 names — are **not** reproduced here; that is enforced on every release by
-`scripts/check-desensitization.mjs` (see `docs/pre-install-audit.md` A13). Any
+`scripts/check-desensitization.mjs`, which runs on every release and in CI. Any
 name this project shares with another product (route paths, state file names,
 format identifiers) is this project's own naming choice, not a copied one.
 

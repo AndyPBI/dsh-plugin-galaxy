@@ -39,7 +39,7 @@ describe('dsh CLI argv', () => {
     const argv = pluginCommandArgs('web', ['add', 'pkg@latest'])
     expect(argv).not.toContain('--profile-dir')
     // `dsh plugin` has exactly one option this plugin may pass; anything else
-    // would be forwarded to pnpm (see docs/pre-install-audit.md).
+    // would be forwarded to pnpm (`dsh plugin` takes only its own flags).
     const flags = argv.filter(token => token.startsWith('--'))
     expect(flags).toEqual(['--profile'])
   })
@@ -244,7 +244,7 @@ describe('install reporting', () => {
  * These assertions pin the rules that prevent it. They are static on purpose:
  * `scripts/layout-check.mjs` measures the same behaviour in real Chrome
  * (line-box counts and overflow), but Chrome is not always available, so the
- * contract lives here too. See docs/pre-install-audit.md §2 A7.
+ * contract lives here too; `npm run check:layout` measures it in a real browser.
  */
 describe('panel layout contracts', () => {
   /** Declarations of the rule that STARTS with `selector`, comments stripped. */
@@ -302,7 +302,7 @@ describe('panel layout contracts', () => {
  * Neither is used today, and this keeps it that way: the failure mode of a
  * stale host contract is not a build error — a slot name is a string, so a
  * removed one simply never renders, and a removed primitive only crashes when a
- * render path happens to touch it. See docs/pre-install-audit.md §5.
+ * render path happens to touch it.
  */
 describe('rc.2 host-contract migrations', () => {
   const clientRoot = fileURLToPath(new URL('../src/client/', import.meta.url))
