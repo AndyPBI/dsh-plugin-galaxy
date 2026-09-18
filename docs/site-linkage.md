@@ -65,12 +65,27 @@ https://www.yhaigc.cn/#/ai/p/<encodeURIComponent(key)>
 
 ```jsonc
 // 每行
-{ "score": 90.44, "band": "S", "scoreVersion": "opc-ranking/1",
+{ "key": "owner/name", "name": "name", "displayName": "给用户看的名字",
+  "score": 90.44, "band": "S", "scoreVersion": "opc-ranking/1",
   "scoreParts": { "popularity": 17.3, "keywords": 10, ... },
   "pinReason": "生态里独一份的能力" }        // 仅编辑推荐条目
 // 顶层
 { "ranking": { "version": "opc-ranking/1", "window": 20, "top": ["owner/name", ...], "pins": [{"key","reason"}] } }
 ```
+
+### 行的身份 vs 行的标签（2026-09 修过的地方）
+
+| 字段 | 谁用 | 规则 |
+|---|---|---|
+| `key` | 深链接、推荐榜、目录门禁 | `owner/name`，**不可改**（改了已分享的链接与榜单一起失效） |
+| `name` | 身份推导、安装/匹配 | 原始名：monorepo 条目就是 `repo#subpath`（221 条里 34 条如此） |
+| **`displayName`** | 卡片标题、搜索、官网页面 | **给用户看的标签**：`catalog:build` 把 `#` 换成空格并合并空白（`scripts/build-plugin-catalog.mjs` 的 `displayNameOf`） |
+
+**为什么必须落成数据**：这条"`#` → 空格"的规则以前只写在官网前端（`pluginText.ts`），产物里没有它 ——
+于是官网显示「archify integrations/deepseek-harness」，而星系面板只能显示带 `#` 的原始 `name`，
+**在官网改展示规则，面板不会跟随**。现在产物每行都带 `displayName`，两端读同一个字段；
+面板仍保留回退（旧产物 / 上游公共目录没有该字段时用 `name`），门禁 `7.18/7.19` 与
+两端各自的测试钉住一致性（官网的 `plugin-catalog.test.ts` 会比对生成器与前端两个实现）。
 
 `top` 是**有序**名次（当前 60 条），`window` 是一次显示多少（20）。星系据此渲染「推荐」：先跳过已安装，
 再取前 `window` 条 —— 所以装掉一个会补上下一个。目录不带 `ranking` 时星系退回完整列表（对上游公共目录安全）。

@@ -882,3 +882,69 @@ describe('Discover — the sort menu', () => {
     expect(cardTitles(host)).toEqual(['bbb', 'aaa', 'ccc'])
   })
 })
+
+/** Type into a text input the way React notices: native setter, then `input`. */
+function typeInto(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+describe('Discover — the label the website ships (displayName)', () => {
+  /**
+   * Monorepo entries are published as `repo#subpath`; the website ships the
+   * readable label as `displayName` and the panel has to use it. Before this,
+   * the rule lived only in the website's frontend, so "rename a plugin on the
+   * website" never reached the panel.
+   *
+   * `name` stays raw: it is the identity (`key === owner/name`), the install spec
+   * and the deep link — a label the website can restyle must not move those.
+   */
+  const ROWS = [
+    { key: 'tt-a1i/archify#integrations/deepseek-harness', name: 'archify#integrations/deepseek-harness', displayName: 'archify integrations/deepseek-harness', owner: 'tt-a1i', npm: '@tt-a1i/archify-dsh', url: 'https://github.com/tt-a1i/archify', category: 'office', stars: 60032 },
+    { key: 'j/v#packages/pkg', name: 'v#packages/pkg', owner: 'j', npm: 'pkg', url: 'https://github.com/j/v', category: 'dev', stars: 3 },
+  ]
+
+  function installStub(): void {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, method: init?.method ?? 'GET' })
+      if (url.includes('/registry')) return json({ registry: { plugins: ROWS, count: ROWS.length } })
+      if (url.includes('/installed')) return json(INVENTORY)
+      if (url.includes('/updates')) return json([])
+      if (url.includes('/discovery-compatibility')) return json({ results: [] })
+      if (url.includes('/status')) {
+        return json({
+          boot: 'test-boot', version: '0.1.1', channel: 'stable', region: 'global', profile: 'web',
+          busy: false, progress: { active: false }, pnpm: { ok: true },
+          restart: { allowed: false, debugger: false, scheduled: false }, installed: [],
+        })
+      }
+      return json({ ok: true })
+    }) as typeof fetch
+  }
+
+  it('prints the shipped label, and falls back to `name` when the catalog has none', async () => {
+    installStub()
+    const host = await mount()
+    await flush()
+    expect(cardTitles(host)).toEqual(['archify integrations/deepseek-harness', 'v#packages/pkg'])
+  })
+
+  it('finds a row by the label the user reads, and by the raw name too', async () => {
+    installStub()
+    const host = await mount()
+    await flush()
+    const input = [...host.querySelectorAll('input')]
+      .find(element => (element.getAttribute('aria-label') ?? '').startsWith('Search plugins')) as HTMLInputElement
+    expect(input).toBeDefined()
+
+    typeInto(input, 'archify integrations')
+    await flush()
+    expect(cardTitles(host)).toEqual(['archify integrations/deepseek-harness'])
+
+    typeInto(input, 'archify#integrations')
+    await flush()
+    expect(cardTitles(host)).toEqual(['archify integrations/deepseek-harness'])
+  })
+})

@@ -228,7 +228,7 @@ describe('a site catalog loaded through the real loader', () => {
 
     const rows = [
       { key: 'V1ki/dsh-plugin-subscriptions', name: 'dsh-plugin-subscriptions', owner: 'V1ki', url: 'https://github.com/V1ki/dsh-plugin-subscriptions', npm: 'dsh-plugin-subscriptions', category: 'service', stars: 340 },
-      { key: 'o/r#packages/pkg', name: 'r#packages/pkg', owner: 'o', url: 'https://github.com/o/r/tree/main/packages/pkg', npm: 'pkg', category: 'dev', stars: 5, score: 64.13, band: 'B', scoreVersion: 'opc-ranking/1', scoreParts: { popularity: 16.2, keywords: 10 }, pinReason: '生态里独一份的能力' },
+      { key: 'o/r#packages/pkg', name: 'r#packages/pkg', displayName: 'r packages/pkg', owner: 'o', url: 'https://github.com/o/r/tree/main/packages/pkg', npm: 'pkg', category: 'dev', stars: 5, score: 64.13, band: 'B', scoreVersion: 'opc-ranking/1', scoreParts: { popularity: 16.2, keywords: 10 }, pinReason: '生态里独一份的能力' },
     ]
     const server = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -267,6 +267,9 @@ describe('a site catalog loaded through the real loader', () => {
       expect(loaded.plugins[1]?.band).toBe('B')
       expect(loaded.plugins[1]?.scoreParts).toEqual({ popularity: 16.2, keywords: 10 })
       expect(loaded.plugins[1]?.pinReason).toBe('生态里独一份的能力')
+      // 展示名同样要穿过重建：漏掉它，面板就只能在卡片上显示带 `#` 的原始 name
+      expect(loaded.plugins[1]?.displayName).toBe('r packages/pkg')
+      expect(loaded.plugins[0]?.displayName).toBeUndefined()
 
       const linked = linkedRegistryFor(runtime as never, loaded)
       expect(linked.linked).toBe(true)

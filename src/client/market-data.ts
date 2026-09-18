@@ -35,6 +35,14 @@ export type Region = 'global' | 'china'
 export interface RegistryPlugin {
   /** npm package name (or `github:` spec for git-only entries). */
   name: string
+  /**
+   * The label the website shows for this row (it computes `repo#subpath` →
+   * `repo subpath` and ships the result). Missing on older catalogs and on the
+   * upstream public one, so the card falls back to `name` — see `displayLabelOf`
+   * in MarketSection.tsx. `name` stays raw because the identity contract
+   * (`key === owner/name`) and the deep link depend on it.
+   */
+  displayName?: string
   /** Source spec accepted by `dsh plugin add`. */
   url?: string
   npm?: string

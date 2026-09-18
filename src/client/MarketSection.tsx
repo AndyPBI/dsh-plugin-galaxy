@@ -398,6 +398,25 @@ function catalogKeyOf(plugin: RegistryPlugin): string | undefined {
   return `${owner}/${name}`
 }
 
+/**
+ * The label a row is DISPLAYED under.
+ *
+ * The catalog ships `displayName` — the website's own label: monorepo entries are
+ * published as `repo#subpath`, which nobody can read, and shown as `repo subpath`.
+ * Older catalogs and the upstream public one carry no such field, so the raw
+ * `name` is the fallback.
+ *
+ * Everything that reads a name for HUMANS goes through here (card title, the
+ * accessible name, the "two rows share a name" hint, the search haystack).
+ * Anything that reads an IDENTITY keeps using `name`/`npm`/`key`: the install
+ * spec, the catalog key, the deep link and the inventory match must not follow a
+ * label the website can restyle.
+ */
+function displayLabelOf(plugin: RegistryPlugin): string {
+  const label = typeof plugin.displayName === 'string' ? plugin.displayName.trim() : ''
+  return label !== '' ? label : plugin.name
+}
+
 /** `owner/repo` of a GitHub URL — the identity a git-sourced install matches on. */
 function repoOf(url: string | undefined): string | undefined {
   if (typeof url !== 'string' || url === '') return undefined
@@ -636,7 +655,7 @@ function PluginCard(props: {
     : status === 'compatible' ? `${css.badge} ${css.badgeOk}` : `${css.badge} ${css.badgeMuted}`
   return (
     <div role="listitem" className={css.cardCell}>
-      <article className={css.card} aria-label={plugin.name}>
+      <article className={css.card} aria-label={displayLabelOf(plugin)}>
         <div className={css.cardHead}>
           {row.rank !== undefined && (
             // 「推荐」视图的名次：就是这个列表的顺序（1、2、3…），搜过的视图里也保持真实名次。
@@ -644,7 +663,7 @@ function PluginCard(props: {
               {`#${String(row.rank)}`}
             </span>
           )}
-          <h3 className={css.cardTitle}>{plugin.name}</h3>
+          <h3 className={css.cardTitle}>{displayLabelOf(plugin)}</h3>
           {installed !== undefined && (
             <span className={`${css.badge} ${css.badgeOk}`}>{t('installedBadge')}</span>
           )}
@@ -1736,7 +1755,8 @@ export function MarketSection(props: {
         if (plugin === undefined) continue
         const installed = matchInstalled(plugin, installedByName, installedByRepo)
         if (installed !== undefined) continue
-        const haystack = [plugin.name, plugin.npm ?? '', plugin.category ?? '', plugin.description ?? '', plugin.owner ?? '']
+        // 搜索同时认展示名与原始名：官网「archify integrations」，原始「archify#integrations/…」
+        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', plugin.description ?? '', plugin.owner ?? '']
           .join(' ')
           .toLowerCase()
         // 名次在搜索之前就定下来：搜过的视图里仍是它真实的名次，而不是"第 1 个匹配"。
@@ -1749,7 +1769,7 @@ export function MarketSection(props: {
       for (const [index, plugin] of entries.entries()) {
         const installed = matchInstalled(plugin, installedByName, installedByRepo)
         const identity = typeof plugin.npm === 'string' && plugin.npm !== '' ? plugin.npm : plugin.name
-        const haystack = [plugin.name, plugin.npm ?? '', plugin.category ?? '', plugin.description ?? '', plugin.owner ?? '']
+        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', plugin.description ?? '', plugin.owner ?? '']
           .join(' ')
           .toLowerCase()
         if (query !== '' && !haystack.includes(query)) continue
@@ -1765,7 +1785,10 @@ export function MarketSection(props: {
     // Flag names that repeat inside THIS listing: those cards must show their
     // owner, because two rows called `dsh-knowledge` are different plugins.
     const counts = new Map<string, number>()
-    for (const row of rows) counts.set(row.plugin.name, (counts.get(row.plugin.name) ?? 0) + 1)
+    for (const row of rows) {
+      const label = displayLabelOf(row.plugin)
+      counts.set(label, (counts.get(label) ?? 0) + 1)
+    }
     for (const row of rows) row.duplicateName = (counts.get(row.plugin.name) ?? 0) > 1
 
     // 推荐榜的名次**就是**目录给的顺序：再按"名称/星数"排一次会把名次打乱

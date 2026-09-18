@@ -278,7 +278,18 @@ CSS 变量**不会报错**：写了一个宿主没定义的 `--dsw-alias-*` 名�
 分数与分项（`score` / `band` / `scoreParts` / `pinReason`）同样由目录提供；公式、权重与人工复核在站点侧
 （`docs/plugin-ranking.md`），插件只负责"按名次渲染 + 解释来源"。
 
-### 6.7 排序菜单里没有"推荐"
+### 6.7 卡片标题与搜索用官网下发的 `displayName`
+
+monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepseek-harness`）：可读性差，
+官网把它展示成 `#` 换空格。这条规则**现在由产物携带**（`displayName`），面板直接读：
+
+| 规则 | 原因 |
+|---|---|
+| 卡片标题 / `aria-label` / 搜索索引 / "同名去重"提示，一律走 `displayLabelOf(plugin)`：`displayName` 优先，缺字段回退 `name` | 官网改展示名，面板必须跟着变；以前规则只在前端，面板显示带 `#` 的原始名，两端不一致 |
+| **身份一律不用展示名**：安装 spec、`key`、深链接、inventory 匹配仍用 `name`/`npm`/`key` | `key === owner/name` 是目录契约，深链接已分享；展示名是官网可以随手重塑的 |
+| 搜索同时认展示名与原始名（haystack 里两个都放） | 用户会照官网的写法搜，也会照 npm 的写法搜 |
+
+### 6.8 排序菜单里没有"推荐"
 
 「推荐」是一个**视图**，不是一种排序：排序下拉保持名称 / Star 数 / npm 下载量 / 发布时间四项（各升降序），
 **不加"推荐分"**。

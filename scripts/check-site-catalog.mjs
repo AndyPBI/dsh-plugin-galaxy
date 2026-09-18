@@ -17,7 +17,7 @@
  *   4. arrays/objects that the client destructures (`categories`, `counts`);
  *   5. every `category` resolves to a declared category;
  *   6. prints the derived deep links, so a human can open one and see the page;
- *   7. the recommendation block the panel's 「未安装」 view renders
+ *   7. the recommendation block the panel's 「推荐」 view renders
  *      (`ranking{version,window,listN,top,pins}` plus per-row `score`/`band`/
  *      `scoreParts`/`pinReason`), including the sidecar `ranking.json`;
  *   8. the panel's derivation, REPLAYED: skip installed rows, take `window` rows in
@@ -224,6 +224,20 @@ const driftedParts = plugins.filter(row => {
 })
 check('7.14 scoreParts add up to score (badge and tooltip must not disagree)',
   driftedParts.length === 0, driftedParts.slice(0, 3).map(row => `${String(row.key)}: ${String(row.score)}`).join(', '))
+
+/*
+ * The row level of the same story: `displayName` is what the card title, the
+ * search index and the website all show. It is DATA, not a frontend rule —
+ * before it existed, the website printed `repoᅩsubpath` nicely and the panel
+ * printed the raw `name`, and "renaming a plugin on the website" never reached
+ * the panel. `name` must stay raw: `key === owner/name` is the identity contract.
+ */
+const noLabel = plugins.filter(row => typeof row?.displayName !== 'string' || row.displayName.trim() === '')
+check('7.18 every row carries a non-empty displayName (the label both surfaces show)',
+  noLabel.length === 0, noLabel.slice(0, 3).map(row => String(row?.key)).join(', '))
+const hashedLabel = plugins.filter(row => typeof row?.displayName === 'string' && row.displayName.includes('#'))
+check('7.19 no displayName still contains `#` (the reader-facing label is readable)',
+  hashedLabel.length === 0, hashedLabel.slice(0, 3).map(row => `${String(row?.key)}: ${String(row?.displayName)}`).join(', '))
 
 /* ---- 7b. the sidecar `ranking.json` must agree with the block ---- */
 let sidecar

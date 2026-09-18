@@ -128,6 +128,18 @@ export interface LogEntry {
 export interface RegistryPlugin {
   /** npm package name (or `github:` spec for git-only entries). */
   name: string
+  /**
+   * What the card title, the search index and the website all show.
+   *
+   * The website computes it from `name` (monorepo entries are published as
+   * `repo#subpath`, which is unreadable as a label) and ships it with every row.
+   * Older catalogs and the upstream public one have no such field, so consumers
+   * fall back to `name`.
+   *
+   * `name` itself is NOT the label: it participates in the identity contract
+   * (`key === owner/name`) and in the deep link, so it stays raw.
+   */
+  displayName?: string
   /** Source spec accepted by `dsh plugin add`. */
   url?: string
   npm?: string

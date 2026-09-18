@@ -107,6 +107,12 @@ function asRegistryPlugin(value: unknown): RegistryPlugin | undefined {
   if (url !== undefined) plugin.url = url
   if (npm !== undefined) plugin.npm = npm
   if (tarball !== undefined) plugin.tarball = tarball
+  // The label the site shows (`repo#subpath` → `repo subpath`). Rows are rebuilt
+  // field by field, so a field that is not copied here is a field the panel
+  // silently loses — that is how monorepo entries ended up displayed with the
+  // raw `#` while the website showed a readable name.
+  const displayName = nonEmptyString(record.displayName)
+  if (displayName !== undefined) plugin.displayName = displayName
   const owner = nonEmptyString(record.owner)
   if (owner !== undefined) plugin.owner = owner
   const category = record.category
