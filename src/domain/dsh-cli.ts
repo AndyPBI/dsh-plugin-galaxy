@@ -37,6 +37,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { logEvent } from '../core/log.ts'
 import { progressTracker } from './progress.ts'
 import { profileDir } from '../core/paths.ts'
+import type { PnpmInvocationLike } from './host-shape.ts'
 import type { GalaxyRuntime } from '../core/runtime.ts'
 import type { InstallResult, ResolvedConfig } from '../core/types.ts'
 
@@ -483,7 +484,6 @@ function collectChild(
  */
 export function createCliRunner(config: ResolvedConfig, runtime?: GalaxyRuntime): PluginRunner {
   const launch = dshLaunch()
-  const timeoutMs = installTimeoutMs()
   // The CLI resolves the profile from `--profile <name>` + `$DSH_HOME` alone, so
   // an explicit non-standard directory cannot be passed through it (see
   // pluginCommandArgs). Say so once per mount rather than operating on a
@@ -494,17 +494,33 @@ export function createCliRunner(config: ResolvedConfig, runtime?: GalaxyRuntime)
       'warn',
       'spawn',
       `profile directory ${config.profileDirectory} is not the standard ${standardDir}; `
-      + 'CLI package operations target the standard one (only the Desktop runner honours an explicit directory)',
+      + 'CLI package operations target the standard one (only a packaged app runner honours an explicit directory)',
     )
   }
+  return makeSpawnRunner({ ...launch, env: spawnEnv(), cli: true }, runtime)
+}
+
+/**
+ * Build a runner around one launch recipe: the shared body of every package
+ * operation (timeout, process-tree kill, progress, `/cancel`).
+ */
+function makeSpawnRunner(
+  launch: { file: string; args: readonly string[]; cwd: string | undefined; env: NodeJS.ProcessEnv; viaShell: boolean; cli: boolean },
+  runtime?: GalaxyRuntime,
+): PluginRunner {
+  const timeoutMs = installTimeoutMs()
   const runner: PluginRunner = async (profile: string, args: string[]): Promise<InstallResult> => {
-    const profileArgs = pluginCommandArgs(profile, args)
-    logEvent('info', 'spawn', `${launch.file} ${profileArgs.join(' ')}`)
+    // A packaged app is handed pnpm directly, so the CLI's `plugin --profile`
+    // wrapper (which would also resolve the profile itself) is not used.
+    const forwarded = launch.cli
+      ? pluginCommandArgs(profile, args)
+      : [...args]
+    logEvent('info', 'spawn', `${launch.file} ${forwarded.join(' ')}`)
     let child: ChildProcess
     try {
-      child = spawnCommand(launch.file, [...launch.args, ...profileArgs], {
+      child = spawnCommand(launch.file, [...launch.args, ...forwarded], {
         cwd: launch.cwd,
-        env: spawnEnv(),
+        env: launch.env,
         // Own process group on POSIX so cancel/timeout can kill the wrapper
         // and the pnpm grandchild with one signal.
         detached: process.platform !== 'win32',
@@ -564,6 +580,61 @@ export function createCliRunner(config: ResolvedConfig, runtime?: GalaxyRuntime)
  */
 export function pluginCommandArgs(profile: string, args: readonly string[]): string[] {
   return ['plugin', '--profile', profile, ...args]
+}
+
+/* ------------------------------------------------------------------ *
+ * Packaged applications (0.2.x `profileContext.packageManager`)
+ * ------------------------------------------------------------------ */
+
+/**
+ * How a packaged application's package manager is launched.
+ *
+ * `profileContext.packageManager` is `{ command, args, env }`: the app hands over
+ * its BUNDLED runtime instead of a PATH executable, because a packaged app has no
+ * pnpm on PATH at all — on Windows the command is the app's own `node.exe` plus
+ * the pnpm entry point. It replaces the removed `desktopPnpm` service (which used
+ * to run pnpm on the plugin's behalf); the plugin now spawns it, which is why the
+ * CLI's `plugin --profile` wrapper is skipped here: the app already scoped the
+ * invocation to its own profile directory.
+ *
+ * Pure so the platform decision can be tested without spawning anything.
+ *
+ * @param invocation - command/args/env the app supplied.
+ * @param platform - `process.platform`, injectable for tests.
+ * @returns the launch recipe for {@link makeSpawnRunner}.
+ */
+export function packagedLaunch(
+  invocation: PnpmInvocationLike,
+  platform: string = process.platform,
+): { file: string; args: string[]; viaShell: boolean } {
+  // A bundled `node.exe`/`node` starts directly; only a `.cmd` shim (what a
+  // PATH-installed pnpm looks like on Windows) needs a shell.
+  const shim = platform === 'win32' && /\.(?:cmd|bat)$/iu.test(invocation.command)
+  return { file: invocation.command, args: [...invocation.args], viaShell: shim }
+}
+
+/**
+ * Runner for a packaged application: pnpm straight from the app's own runtime.
+ *
+ * The app's `env` is layered OVER the spawn environment — it describes where its
+ * bundled runtime lives, so it must not be overridden by ours.
+ */
+export function createPackagedRunner(config: ResolvedConfig, runtime?: GalaxyRuntime): PluginRunner {
+  if (config.packageManager === undefined) {
+    throw new Error('dsh-plugin-galaxy: createPackagedRunner requires config.packageManager')
+  }
+  if (!isAbsolute(config.profileDirectory) || config.profileDirectory.includes('\0')) {
+    throw new Error('dsh-plugin-galaxy: a packaged profile directory must be an absolute path without NUL')
+  }
+  const launch = packagedLaunch(config.packageManager)
+  return makeSpawnRunner({
+    file: launch.file,
+    args: launch.args,
+    cwd: config.profileDirectory,
+    env: { ...spawnEnv(), ...config.packageManager.env },
+    viaShell: launch.viaShell,
+    cli: false,
+  }, runtime)
 }
 
 /* ------------------------------------------------------------------ *

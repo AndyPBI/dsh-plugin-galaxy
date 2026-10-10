@@ -39,7 +39,17 @@ export interface ResolvedConfig {
   profileDirectory: string
   allowRestart: boolean | undefined
   maxSnapshots: number
+  /**
+   * A packaged application's own package manager (0.2.x
+   * `profileContext.packageManager`). Present only when the host is an app that
+   * ships its own runtime — the marker for "pnpm is not on PATH AND the shell
+   * owns this process". The mount then drives pnpm directly instead of the
+   * `dsh plugin` wrapper, which cannot target a non-standard profile directory.
+   */
+  packageManager?: PnpmInvocationLike
 }
+
+import type { PnpmInvocationLike } from '../domain/host-shape.ts'
 
 /* ------------------------------------------------------------------ *
  * Persistent entities

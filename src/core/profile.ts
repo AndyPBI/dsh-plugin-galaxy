@@ -192,6 +192,10 @@ export function specRepo(spec: string): string | undefined {
 export function specKind(spec: string): InstallKind {
   if (spec.startsWith('github:') || spec.includes('github.com')) return 'git'
   if (spec.startsWith('file:') || spec.startsWith('./') || spec.startsWith('../') || spec.startsWith('/')) return 'local'
+  // Windows absolute paths: a drive letter (`C:\\dir\\pkg.tgz`) or a UNC share
+  // (`\\\\server\\share`). Without this they fall through to `unknown`, and a
+  // locally installed tarball would be offered an npm update it can never get.
+  if (/^[A-Za-z]:[\\/]/u.test(spec) || spec.startsWith('\\\\')) return 'local'
   if (spec.endsWith('.tgz') || spec.endsWith('.tar.gz')) return 'tarball'
   if (spec.startsWith('npm:')) return 'alias'
   if (spec.startsWith('workspace:')) return 'local'

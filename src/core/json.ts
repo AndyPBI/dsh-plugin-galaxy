@@ -44,17 +44,44 @@ export function fileExists(file: string): boolean {
   }
 }
 
-/** Write text atomically: fill a temporary sibling, then rename over the target. */
+/** Lock-ish Windows errors that a retry (or the direct write) resolves. */
+const TRANSIENT_RENAME = new Set(['EPERM', 'EACCES', 'EBUSY'])
+
+/**
+ * Write text atomically: fill a temporary sibling, then rename over the target.
+ *
+ * On Windows `rename` over an existing file is a `MoveFileEx` replace that fails
+ * with EPERM/EACCES/EBUSY while anything holds the target open — a scanner, an
+ * editor, or the host re-reading its own state. POSIX has no such window, so the
+ * retry and the direct-write fallback cost nothing there and keep a state write
+ * from failing on Windows for a reason the user cannot act on.
+ */
 export function writeFileAtomic(file: string, text: string, mode = 0o600): void {
   ensureParent(file)
   const temporary = join(dirname(file), `.${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.tmp`)
   try {
     writeFileSync(temporary, text, { mode })
     renameSync(temporary, file)
+    return
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    if (code === undefined || !TRANSIENT_RENAME.has(code)) {
+      try {
+        rmSync(temporary, { force: true })
+      } catch { /* the rename already consumed it, or the disk refused both */ }
+      throw error
+    }
+  }
+  try {
+    // The rename is blocked by a holder we cannot see. Writing in place loses
+    // atomicity for this one document, which is strictly better than losing the
+    // write: the alternative is a settings change that silently does not stick.
+    writeFileSync(file, text, { mode })
+    rmSync(temporary, { force: true })
   } catch (error) {
     try {
       rmSync(temporary, { force: true })
-    } catch { /* the rename already consumed it, or the disk refused both */ }
+    } catch { /* nothing left to clean */ }
     throw error
   }
 }

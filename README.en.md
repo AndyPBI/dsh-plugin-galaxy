@@ -27,8 +27,10 @@ driven by two self-owned contracts — [`docs/implementation-contract.md`](docs/
   a mutation lock, atomic writes, and automatic rollback on failure.
 - **Settings card** — snapshots and presets, WebDAV/Gist sync, region and release channel,
   optional one-click restart, self-uninstall, profile diagnostics and a redacted log export.
-- **Two host generations** — works on `0.1.5-rc.2` and `0.2.1-alpha.1`; the three contract
-  differences (icon naming, the settings-card seat, plugin settings) are resolved at runtime.
+- **Two host generations, web and desktop** — works on `0.1.5-rc.2` and `0.2.1-alpha.1`, including the
+  packaged desktop app on Windows/macOS: the settings-card seat, icon naming, plugin settings and the
+  app's own bundled package manager are all resolved at runtime (`profileContext`). Self-restart stays
+  off where the shell owns the process.
 
 ## Install
 

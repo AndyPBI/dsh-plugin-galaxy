@@ -18,6 +18,8 @@ import { mountGalaxyRoutes, type GalaxyMountConfig, type GalaxyRoutesHost } from
 import type { AgentsServiceLike } from './domain/agents.ts'
 import { createDesktopPluginRuntime, type DesktopPnpmLike } from './domain/dsh-cli.ts'
 import type { HostLogger } from './api/host.ts'
+import { readProfileContext, resolveHostShape } from './domain/host-shape.ts'
+import type { ProfileContextLike } from './domain/host-shape.ts'
 import { installGalaxySettings } from './domain/settings.ts'
 import { logEvent } from './core/log.ts'
 
@@ -143,10 +145,37 @@ export function apply(ctx: Context, config?: GalaxyPluginConfig): void {
       ...optionalLogger(hostCtx),
     }
     const desktopProfiles = ctx.get('desktopProfiles') as DesktopProfilesLike | undefined
+    // 0.2.x replaced `desktopProfiles`/`desktopPnpm` with one `profileContext`
+    // service (it exists for every dsh-launched profile, packaged or not).
+    const shape = resolveHostShape({
+      configuredProfile: config?.profile,
+      profileContext: readProfileContext(ctx),
+      legacyDesktop: desktopProfiles,
+      argvProfile: argvProfile(),
+    })
+
+    // A packaged application (0.2.x Desktop): it ships its own pnpm, which the
+    // CLI wrapper cannot drive against a non-standard profile directory, and its
+    // shell owns the process lifecycle — hence no settings switch for restart.
+    if (shape.packaged && shape.profileDirectory !== undefined) {
+      const packaged: GalaxyMountConfig = {
+        profile: shape.profile,
+        profileDirectory: shape.profileDirectory,
+        ...(shape.packageManager === undefined ? {} : { packageManager: shape.packageManager }),
+        allowRestart: false,
+        maxSnapshots: config?.maxSnapshots,
+      }
+      ;(hostCtx as unknown as GalaxyEffectHost).effect(
+        () => mountGalaxyRoutes(routesHost, packaged, undefined, agentsLookupOf(ctx)),
+        'dsh-plugin-galaxy: packaged-app http routes and package operations',
+      )
+      return
+    }
 
     if (desktopProfiles === undefined) {
       const resolved: GalaxyMountConfig = {
-        profile: config?.profile ?? argvProfile() ?? 'web',
+        profile: shape.profile,
+        ...(shape.profileDirectory === undefined ? {} : { profileDirectory: shape.profileDirectory }),
         // Left UNDEFINED when unconfigured, deliberately: defaulting to true
         // here would turn "the operator said nothing" into "the operator said
         // yes", and restartAllowed() could no longer tell them apart — which

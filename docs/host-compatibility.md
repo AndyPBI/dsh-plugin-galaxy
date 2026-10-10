@@ -83,3 +83,45 @@ cd <plugin> && npm run check:host-surface && npm run check:host-settings && npm 
 
 `npm run check:host-surface` 会把**版本相关的每一条**都验一遍：primitive（含图标分组）、槽位
 （两代任一）、设计令牌、peer 范围、宿主补丁、`.actionLink` 字号。
+
+---
+
+## 6. 桌面版 / Windows（0.2.x 的又一处契约合并）
+
+0.2.x 把桌面壳过去给插件的**两个服务合并成了一个**，因此"只认旧名字"的插件在桌面版里会
+**静默走错分支**：
+
+| 旧（≤ 0.1.5-rc.2 的 Desktop） | 新（0.2.x，含 Windows 桌面版） |
+|---|---|
+| `desktopProfiles`（应用自有的 profile 列表） | **`profileContext`**（每个由 dsh 启动的 profile 都有：`name` / `dir` / `patchPath` / `home` / `packageManager` / `startedBundles` / `overlays`） |
+| `desktopPnpm`（应用替插件跑 pnpm 的服务） | `profileContext.packageManager = { command, args, env }`：应用把自己的**内置运行时**交出来，由插件直接启动 |
+
+为什么"只认旧名字"会坏：
+
+- 桌面宿主**不是**以 `dsh --profile <name>` 启动的（它起自己的 `dsh-desktop-host <runtimeDir> <projectDir> …`），
+  所以 argv 里没有 profile 可退；只认旧服务的插件会把 profile 解析成 `web` ——
+  **读写错 profile**。
+- 打包应用**没有 PATH 上的 pnpm**（Windows 上更是如此：命令是应用自带的 `node.exe` + pnpm 入口），
+  拿不到内置运行时 = 安装/更新/卸载全部失败。
+- 打包应用**拥有进程生命周期**：插件若还开着"一键重启"，就会绕过应用的启动器与 IPC。
+
+本插件的做法（`src/domain/host-shape.ts`，纯函数 + 单测）：
+
+1. 解析顺序：**操作员 config → `profileContext` → argv → `desktopProfiles`（旧桌面）→ `web`**；
+   `profileDirectory` 只在"解析出的 profile 就是被启动的那个"时才跟着走
+   （显式配置了别的 profile 时仍用标准 `<DSH_HOME>/profiles/<name>`，否则会动错文件）。
+2. `profileContext.packageManager` 存在即视为**打包应用**：用 `createPackagedRunner` 直接启动它
+   （`cwd` = 该 profile 目录，`env` 以应用给出的为准；Windows 上只有 `.cmd` 垫片才走 `cmd.exe /c`，自带 `node.exe` 直接起），
+   跳过 CLI 的 `plugin --profile` 包装（它无法指向非标准目录）。
+3. 打包应用下 `allowRestart` 强制 `false`，与旧桌面分支同一条理由：生命周期归外壳。
+
+Windows 侧另有既有实现（非本次新增，均有注释与门禁）：`dsh.cmd` 必须经 shell 启动、
+`taskkill /t /f` 杀进程树、PATH 分隔符、`ComSpec`、`windowsHide`；本次补的两处：
+
+- **原子写的 Windows 窗口**：`rename` 覆盖被占用的目标会 EPERM/EACCES/EBUSY → 重试一次，仍失败则就地写
+  （丢一次原子性优于丢一次设置写入）；
+- **盘符 / UNC 绝对路径** 归入"本地来源"（否则被当成未知来源，本地 tarball 会被提示一个永远拿不到的 npm 更新）。
+
+> 诚实说明：以上是**契约级适配 + 单元测试**（`tests/host-desktop.test.ts`）。Windows 桌面版的
+> **运行时**验证需要一台 Windows 机器：安装后确认「设置 → 插件星系」能列出 profile、
+> 安装/卸载走的是应用内置 pnpm、且没有出现"重启"入口。macOS 上的 `check:*` 门禁无法覆盖它。

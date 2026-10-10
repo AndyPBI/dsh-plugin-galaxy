@@ -18,7 +18,7 @@
 |---|---|
 | 包名 | `dsh-plugin-galaxy` |
 | 宿主 | DeepSeek Harness（cordis 插件系统），Web + Desktop |
-| 已验证宿主 | `0.1.5-alpha.1` → `0.2.1-alpha.1`（两代同时支持，差异在运行时兜底，见 [`docs/host-compatibility.md`](docs/host-compatibility.md)） |
+| 已验证宿主 | `0.1.5-alpha.1` → `0.2.1-alpha.1`，**Web 与桌面版**（Windows/macOS）两代同时支持；差异在运行时兜底，见 [`docs/host-compatibility.md`](docs/host-compatibility.md) |
 | 依赖 | 无运行时第三方依赖（React/宿主组件由宿主注入）；peer 只有 `cordis` 与 `schemastery` |
 | 数据 | 文件系统：`<profile>/.dsh-galaxy/`，无数据库 |
 | 遥测 | 无。不采集、不上报任何使用数据 |
@@ -113,7 +113,7 @@ dsh plugin --profile web add \
 
 | | |
 |---|---|
-| DSH | `>=0.1.5-alpha.1`（含 `0.2.1-alpha.1`）；0.2.x 要求 Node `^22.19.0 \|\| >=24.0.0` |
+| DSH | `>=0.1.5-alpha.1`（含 `0.2.1-alpha.1`）；0.2.x 要求 Node `^22.19.0 \|\| >=24.0.0`；桌面版（含 Windows）用应用自带的 pnpm，无需系统 pnpm |
 | 包管理 | 宿主自带的 pnpm（安装/卸载由 `dsh plugin` 转发给 pnpm） |
 | 网络 | 拉目录、查 npm 版本、看 GitHub 更新日志需要出站；离线时面板显示缓存与明确错误 |
 
@@ -184,6 +184,7 @@ dsh plugin --profile web add \
 |---|---|
 | 设置里看不到「插件星系」 | 装完必须**完整重启宿主**；确认 profile 里已启用（面板「已安装」或 `dsh plugin --profile web list`） |
 | 目录是旧的 / 有新插件看不到 | 面板右上「刷新」强制重新校验（ETag）；或检查 `catalogUrl` 指向 |
+| 桌面版里看不到「一键重启」 | 设计如此：打包应用拥有进程生命周期，重启由应用负责（Web 形态下 supervisor 未显式允许时同样禁用） |
 | 更新检查说"不检查更新" | 该插件是从本地 tarball（`file:`）装的，没有可比对的远端版本 |
 | 兼容性显示"未知" | 尚未拿到该包的 manifest 事实（首次会异步探测，之后按 TTL 缓存） |
 | 安装失败 | 面板会给出 pnpm 的原始输出；确认网络与 registry，必要时配置 `DSHG_NPM_MIRROR` / `HTTP(S)_PROXY` |

@@ -26,7 +26,8 @@ import { galaxyDir, LOG_FILE, profileDir } from '../core/paths.ts'
 import { GalaxyRuntime } from '../core/runtime.ts'
 import type { ResolvedConfig } from '../core/types.ts'
 import type { AgentsServiceLike } from '../domain/agents.ts'
-import { createCliRunner, type PluginRunner } from '../domain/dsh-cli.ts'
+import { createCliRunner, createPackagedRunner, type PluginRunner } from '../domain/dsh-cli.ts'
+import type { PnpmInvocationLike } from '../domain/host-shape.ts'
 import { resolveRegionOnce } from '../domain/region-probe.ts'
 import { UpdateOperationStoreV1 } from '../domain/update-api-v1.ts'
 import type { GalaxyHost } from './host.ts'
@@ -49,6 +50,8 @@ export interface GalaxyMountConfig {
   profileDirectory?: string
   allowRestart?: boolean
   maxSnapshots?: number
+  /** A packaged app's bundled package manager; see `ResolvedConfig`. */
+  packageManager?: PnpmInvocationLike
 }
 
 /** Host services the route layer needs. */
@@ -85,6 +88,7 @@ export function mountGalaxyRoutes(
     profileDirectory: directory,
     allowRestart: config.allowRestart,
     maxSnapshots: config.maxSnapshots ?? DEFAULT_MAX_SNAPSHOTS,
+    ...(config.packageManager === undefined ? {} : { packageManager: config.packageManager }),
   }
   const version = pluginVersion()
   const operations = new UpdateOperationStoreV1(`${Date.now().toString(36)}`)
@@ -122,7 +126,13 @@ export function mountGalaxyRoutes(
     version,
     ...(agentsLookup === undefined ? {} : { agentsLookup }),
   })
-  if (runner === undefined) cliRunner = createCliRunner(resolved, runtime)
+  // A packaged app ships its own pnpm; the CLI wrapper cannot target its profile
+  // directory, so the app's runtime is driven directly.
+  if (runner === undefined) {
+    cliRunner = resolved.packageManager === undefined
+      ? createCliRunner(resolved, runtime)
+      : createPackagedRunner(resolved, runtime)
+  }
   const router = new Router(host, runtime)
 
   // Persistent, sanitized event log for issue reports.
