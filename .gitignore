@@ -21,3 +21,4 @@ site/index.html.bak
 # 内部工作文档：只在本地保留，不进仓库
 /plantodo.md
 /docs/pre-install-audit.md
+/.screenshots/

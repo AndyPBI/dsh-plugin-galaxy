@@ -43,7 +43,8 @@
     "check:layout": "node scripts/layout-check.mjs",
     "check:host-surface": "node scripts/check-host-surface.mjs",
     "check:site-catalog": "node scripts/check-site-catalog.mjs",
-    "check:desensitization": "node scripts/check-desensitization.mjs"
+    "check:desensitization": "node scripts/check-desensitization.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",

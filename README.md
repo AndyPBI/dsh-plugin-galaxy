@@ -1,175 +1,233 @@
-# Plugin Galaxy · dsh-plugin-galaxy
+# Plugin Galaxy · `dsh-plugin-galaxy`
 
-> DSH 可视化插件星系：逛一逛，点一下，装好。
-> A visual plugin galaxy inside DeepSeek Harness — browse, search, and one-click install community plugins.
+[![ci](https://github.com/AndyPBI/dsh-plugin-galaxy/actions/workflows/ci.yml/badge.svg)](https://github.com/AndyPBI/dsh-plugin-galaxy/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![host](https://img.shields.io/badge/DSH-0.1.5%20%7C%200.2.1-informational)](docs/host-compatibility.md)
+[![telemetry](https://img.shields.io/badge/telemetry-none-success)](#权限与安全)
 
-本仓库是一个 **DeepSeek Harness（DSH）插件项目**：一个装进宿主设置对话框的可视化插件星系
-（浏览、搜索、一键安装、更新、启停、备份恢复、诊断）。它由两份**自持契约**驱动 ——
-`docs/implementation-contract.md`（服务端）与 `docs/client-contract.md`（客户端）—— 三者随代码一起演进。
+> **于万千插件中甄选价值，DeepSeek Harness 扩展更轻盈。**
+> A visual plugin galaxy inside DeepSeek Harness — browse, search, and install community plugins without leaving the app.
 
-| 项 | 值 |
+装在 **DeepSeek Harness（DSH）设置对话框**里的插件市场：逛、搜、看排名、一键安装，
+更新/启停/卸载/备份恢复/诊断也在同一个面板里完成。它**不占侧栏座位**，
+不往会话里塞命令，也不在后台偷偷跑活儿 —— 只有你打开设置时才出现。
+
+![全部：卡片网格 + 搜索/筛选/排序](https://raw.githubusercontent.com/AndyPBI/dsh-plugin-galaxy/main/docs/screenshots/01-market-all.png)
+
+| | |
 |---|---|
 | 包名 | `dsh-plugin-galaxy` |
-| 开发者 | AndyPBI（`dalianyunhai@gmail.com`）· <https://github.com/AndyPBI> |
-| 仓库 | <https://github.com/AndyPBI/dsh-plugin-galaxy> |
-| 端点前缀 | `/dsh-galaxy` |
-| 宿主 | DeepSeek Harness（cordis 插件系统），Web + Desktop 两种运行模式 |
-| 已验证宿主版本 | `0.1.5-alpha.1` → `0.1.5-rc.2`（源码级契约 diff：仅 `slot-catalog.ts` 与 `ui-primitives` 有改动，均不影响本项目；宿主版本由插件自动探测并显示在面板与诊断页） |
-| 「推荐」视图 | 显示官网目录给出的**综合推荐前 20 条**（按 `ranking.top` 名次、跳过已安装并自动补位），每张卡片印 `#1`、`#2`、`#3`… 名次，另带分档徽标与"为什么推荐"；完整目录见「全部」。目录不带推荐块时这个入口退回「未安装」标签与完整列表。见 `docs/client-contract.md` §6.6 |
-| 排序菜单 | 只有 名称 / Star 数 / npm 下载量 / 发布时间（各升降序）——「推荐」是视图不是排序，菜单里没有"推荐分"；「推荐」视图隐藏排序下拉（顺序由 `ranking.top` 决定）。见 `docs/client-contract.md` §6.7、`docs/site-linkage.md` §四之二 |
-| 宿主补丁 | 升级宿主会丢掉**本机补丁**（如侧栏条目垂直排列）；清单与核对方式见 `docs/host-patches.md`，`npm run check:host-surface` 会逐条自动检查 |
-| 宿主版本 | 同时支持 **0.1.5-rc.2** 与 **0.2.1-alpha.1** 两代（图标改名、设置卡片座位、插件设置项三处差异都在运行时兜底）；清单见 `docs/host-compatibility.md` |
-| 面板形态 | 打开即是市场：副标题 + 搜索/筛选/排序 + 卡片。**没有标签栏，也没有常驻状态条**；五个筛选状态（全部/推荐/已安装/可更新/不兼容）**都是同一套卡片网格**，进度/取消/回滚在有活动时自动出现。见 `docs/client-contract.md` §5 |
-| 客户端 | React 18 + tsdown 打包的 `client/client.js`，注入宿主设置对话框 |
-| 数据存储 | 文件系统（`<profile>/.dsh-galaxy/`），无 SQL、无 ORM |
-| 设计契约 | 服务端 `docs/implementation-contract.md`：路由表、对象、规则、状态文件；客户端 `docs/client-contract.md`：槽位、组件、文案与布局契约 |
+| 宿主 | DeepSeek Harness（cordis 插件系统），Web + Desktop |
+| 已验证宿主 | `0.1.5-alpha.1` → `0.2.1-alpha.1`（两代同时支持，差异在运行时兜底，见 [`docs/host-compatibility.md`](docs/host-compatibility.md)） |
+| 依赖 | 无运行时第三方依赖（React/宿主组件由宿主注入）；peer 只有 `cordis` 与 `schemastery` |
+| 数据 | 文件系统：`<profile>/.dsh-galaxy/`，无数据库 |
+| 遥测 | 无。不采集、不上报任何使用数据 |
+| 许可 | MIT © 2026 AndyPBI |
 
-## 1. 它做什么
+---
 
-Plugin Galaxy 把"找插件、装插件、管插件"收进**宿主设置对话框**里的一个星系面板。
-插件不占用侧栏座位（`sidebar.footer.action`）——侧栏底部只保留宿主与其它插件的条目。
+## 1. 为什么值得装
 
-- **Discover**：拉取 curated catalog，搜索、按分类/安装态/兼容性筛选，一键安装。
-- **Installed**：查看已装插件的版本、来源类型（npm/git/local）、bundle 归属；启停、更新、卸载、
-  备注、分组、收藏、查看更新记录。
-- **Favorites**：收藏尚未安装的 catalog 条目，作为待装书签。
-- **Themes**：互斥激活主题型插件 bundle。
-- **Operations**：变更操作的生命周期面板（排队/运行/需输入/完成/告警/失败），支持取消与回滚。
-- **Diagnostics**：profile 包清单诊断（bundle 解析、peer 冲突、重名），以及脱敏日志导出。
-- **Settings card**：备份/恢复、WebDAV、Gist 同步、下载区域、GitHub 代理、发布通道、一键重启、自我卸载。
+- **排名是真的**：面板直接读官网目录的综合推荐榜（`ranking.top`），
+  卡片带 `#1`、`#2`… 名次与分档徽标，点开有"为什么推荐"的评分构成。
+  没有把"下载量最高"包装成"推荐"。
+- **装完就能用**：安装、更新、启停、卸载、回滚都在面板里，进度/取消/回滚有独立的状态面板；
+  失败会留下可读原因，而不是让 profile 处于半坏状态。
+- **敢动你的 profile**：每次破坏性操作前先做 profile 快照（三文件 + 回滚令牌），
+  失败自动回滚；写操作走互斥锁 + 原子写（临时文件 + rename），不靠"应该没问题"。
+- **两代宿主都能跑**：宿主在 0.2.x 改了图标命名、设置卡片座位与插件设置项三处契约，
+  本插件用运行时解析同时兼容 `0.1.5-rc.2` 与 `0.2.1-alpha.1`，不是"只支持最新版"。
+- **失败隔离**：客户端有 error boundary（面板崩了给恢复面板 + 导出日志），
+  服务端每个路由都独立捕获 —— 本插件出问题不会让你的宿主起不来。
 
-## 2. 架构
+## 2. 功能
 
-```text
-DSH 宿主（cordis）
-   │ ctx.inject(['webServer','loader'])
-   ▼
-src/index.ts            apply(ctx, config)  ── Web 宿主分支 / Desktop 宿主分支
-   │
-src/api/index.ts        mountGalaxyRoutes() ── 注册 42 个端点 + 持久化日志 + 区域探测
-   ├── src/api/router.ts        路由注册、同源/loopback 守卫、统一错误翻译
-   ├── src/api/routes-*.ts      8 个路由组（catalog/tuning/diagnostics/protection/network/lifecycle/v1/host）
-   ▼
-src/domain/*.ts         领域模块（registry、updates、install、snapshot、presets、order、patch、
-                        themes、groups、hot、backup、gist、regions、channels、restart、
-                        self-uninstall、source-migration、pnpm-compat、diagnostics、check …）
-   ▼
-src/core/*.ts           共享基础层（types/http/log/net/json/locks/paths/profile/state/runtime）
-   ▼
-文件系统 · 子进程（dsh CLI / pnpm） · 出站 HTTP（catalog / npm / GitHub / WebDAV / Gist）
-```
+### 2.1 发现与安装
 
-信任边界（与规范一致）：
-
-1. **宿主信任边界**：插件运行在宿主进程内，直接拥有文件系统与子进程能力；市场 UI 只应暴露给 loopback。
-2. **请求信任边界**：所有变更路由校验同源（`sameOrigin`）；破坏性路由（重启、自我卸载、备份下载）
-   额外要求 loopback 且拒绝代理转发。
-3. **数据边界**：profile 数据（可能包含凭据）只在用户显式操作时经备份/WebDAV/Gist 外发。
-
-写一致性没有数据库事务，由三件事承担：**变更互斥锁**（install / write 两类队列）、**原子写**
-（临时文件 + rename）、**失败回滚**（操作前捕获 manifest/lockfile 与回滚令牌）。
-
-## 3. 安装与使用
-
-```bash
-# 在当前 profile 中安装（宿主会应用 cordis.patch.yml 并加载插件）
-dsh plugin add dsh-plugin-galaxy
-
-# 或本地开发
-npm install
-npm run build      # tsc 产出 lib/，tsdown 产出 client/client.js
-```
-
-安装后打开宿主设置对话框，左侧即出现 **Plugin Galaxy** 入口；插件自身的配置页出现在
-设置 → 插件 → `dsh-plugin-galaxy` 卡片。
-
-### 开发命令
-
-```bash
-npm run typecheck   # 服务端 + 客户端两套 tsconfig 全量类型检查
-npm run build       # 服务端编译 + 客户端 bundle（含声明文件说明符修正）
-npm test            # vitest（核心层与路由层）
-npm run validate:registry   # 校验 catalog 载荷（CI 门禁）
-```
-
-### 安装前自检（推荐在 `dsh plugin add` 之前执行）
-
-```bash
-npm run preinstall-check   # 类型检查 + 构建 + 产物体检 + 客户端契约 + 测试
-npm run verify:dist        # 打包产物体检：入口/exports/dsh.bundle.patch/lib 引用/客户端 externals/files
-npm run smoke:client       # 按 __ModuleLoader__ 契约求值客户端 bundle 并渲染每个界面
-npm run smoke:install      # 真实 cordis + 真实 host webserver 下的安装仿真（需 DSH checkout，可 --checkout 指定）
-```
-
-本仓库的发版门禁（`npm run release` 的每一步）与宿主契约核对结论都在 `scripts/` 与 `docs/host-patches.md` 里，可自行复跑。
-
-## 4. 数据对象（物理文件）
-
-| 路径 | 内容 |
+| 能力 | 说明 |
 |---|---|
-| `<profile>/package.json` | profile 依赖清单、`dsh.profile.bundles` 顺序、pnpm allowBuilds |
-| `<profile>/pnpm-lock.yaml` | 锁定的依赖解析（市场只做整体快照/恢复） |
-| `<profile>/cordis.patch.yml` | 用户补丁层；市场写 disable/force 行 |
-| `<profile>/.dsh-galaxy/state.json` | 星系自有状态（disabled/groups/notes/channel/region/favorites/githubProxy） |
-| `<profile>/.dsh-galaxy/presets.json` | 命名组合预设 |
-| `<profile>/.dsh-galaxy/snapshots/<id>.json` | profile 三文件快照（v2，显式记录缺失） |
-| `<profile>/.dsh-galaxy/log.ndjson` | 脱敏事件日志（≤256KB，最新半量保留） |
-| `<profile>/.dsh-galaxy/hot-<n>.yml` | 热装载输入文件 |
-| `<profile>/.dsh-galaxy/discovery-cache.json` | npm manifest 兼容性事实缓存 |
+| 五个筛选 | **全部 / 推荐 / 已安装 / 可更新 / 不兼容**，都是同一套卡片网格；筛选是视图，不是排序 |
+| 推荐视图 | 官网 `ranking.top` 前 20（跳过已安装自动补位），每张卡片印名次与分档（S/A/B/C）、评分与"为什么推荐"（编辑推荐条目带 🖊 与理由） |
+| 搜索 | 名称 / npm 包名 / 分类 / 描述 / 作者，同时认**官网展示名**与原始包名 |
+| 排序 | 名称 / Star 数 / npm 下载量 / 发布时间，各升降序（推荐视图按名次，不排序） |
+| 卡片信息 | 分类、★ Star、下载量、版本、来源类型（npm / github / 本地）、bundle 归属、兼容性判定、评论入口 |
+| 一键安装 | 直接调用宿主 CLI 安装到当前 profile；可选 GitHub 前缀代理 |
+
+![推荐：官网排名前 20](https://raw.githubusercontent.com/AndyPBI/dsh-plugin-galaxy/main/docs/screenshots/02-recommended.png)
+
+### 2.2 已安装与生命周期
+
+![已安装：启停/更新/卸载](https://raw.githubusercontent.com/AndyPBI/dsh-plugin-galaxy/main/docs/screenshots/03-installed.png)
+
+- 版本、来源类型、bundle 归属一览；**启用 / 停用、更新、卸载**（本插件自己的卡片不提供自我卸载按钮，
+  避免把自己卸掉后连界面一起消失）
+- **备注与分组**：给自己的插件写备注、分组，收藏待装条目
+- **更新检查**：npm 与 GitHub 两种来源，可强制刷新；本地安装（`file:` tarball）明确标注不检查更新
+- **操作面板**：排队 / 运行 / 需要输入 / 完成 / 告警 / 失败，支持取消与回滚
+- **更新日志**：按插件查看 release notes（来源可配置）
+
+### 2.3 备份、迁移与自救（设置卡片）
+
+- **快照与预设**：把 profile 三文件（`package.json` / `pnpm-lock.yaml` / `cordis.patch.yml`）
+  存成命名快照或组合预设，一键恢复；保留数量可配（默认 20）
+- **WebDAV / GitHub Gist 同步**：把备份推到自己的存储；只在显式点击时外发
+- **下载区域 / 发布通道**：选择目录与更新来源的区域与通道
+- **一键重启**（默认关闭，见[权限与安全](#权限与安全)）、**自我卸载**
+- **诊断**：bundle 解析、peer 冲突、重名包清单；**脱敏日志导出**（token/密码打码）用于反馈问题
+- **收藏与主题**：收藏待装条目；互斥激活主题型插件 bundle
+
+![插件详情：评分构成与来源](https://raw.githubusercontent.com/AndyPBI/dsh-plugin-galaxy/main/docs/screenshots/04-detail-modal.png)
+
+## 3. 安装
+
+> **本插件不在 npm 上**（`registry.npmjs.org/dsh-plugin-galaxy` 不存在），
+> 所以 `dsh plugin add dsh-plugin-galaxy` 不会成功。请用下面两条路径之一。
+
+### 路径 A：从源码构建（推荐，当前确定可用）
+
+```bash
+git clone https://github.com/AndyPBI/dsh-plugin-galaxy.git
+cd dsh-plugin-galaxy
+npm ci                 # 没有 lockfile 的旧版本可用 npm install
+npm run build          # 服务端 tsc → lib/，客户端 tsdown → client/client.js
+npm pack               # 产出 dsh-plugin-galaxy-<version>.tgz
+
+# 装进你的 profile（把 web 换成你的 profile 名）
+dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.29.tgz
+```
+
+### 路径 B：从 Release 附件安装（仓库发布 Release 后）
+
+```bash
+dsh plugin --profile web add \
+  https://github.com/AndyPBI/dsh-plugin-galaxy/releases/download/v0.1.29/dsh-plugin-galaxy-0.1.29.tgz
+```
+
+### 装完怎么用
+
+1. **完整重启宿主**（退出并重新启动 `dsh`；只刷新页面不够 —— 插件是在宿主启动时装载的）。
+2. 打开**设置对话框 → 插件星系**：打开即是市场。
+3. 卸载：`dsh plugin --profile web remove dsh-plugin-galaxy`，或在面板里用自我卸载。
+
+### 环境要求
+
+| | |
+|---|---|
+| DSH | `>=0.1.5-alpha.1`（含 `0.2.1-alpha.1`）；0.2.x 要求 Node `^22.19.0 \|\| >=24.0.0` |
+| 包管理 | 宿主自带的 pnpm（安装/卸载由 `dsh plugin` 转发给 pnpm） |
+| 网络 | 拉目录、查 npm 版本、看 GitHub 更新日志需要出站；离线时面板显示缓存与明确错误 |
+
+## 4. 权限与安全
+
+**它读写什么**
+
+| 位置 | 用途 |
+|---|---|
+| `<profile>/package.json`、`pnpm-lock.yaml`、`cordis.patch.yml` | 安装/启停/卸载的写入目标；每次改动前先快照，失败回滚 |
+| `<profile>/.dsh-galaxy/state.json` | 星系自有状态：禁用列表、分组、备注、收藏、通道、区域、GitHub 代理、目录地址 |
+| `<profile>/.dsh-galaxy/presets.json`、`snapshots/<id>.json` | 组合预设与 profile 快照 |
+| `<profile>/.dsh-galaxy/log.ndjson` | 脱敏事件日志（≤256KB，只保留最新一半），可导出用于反馈 |
+
+**它访问哪些网络**（全部出站，且都有开关）
+
+| 目的地 | 何时 |
+|---|---|
+| 插件目录（默认官网 `yhaigc.cn`，可用 `DSHG_REGISTRY_URL` / `catalogUrl` 改） | 拉取目录与推荐榜（带 ETag 复用） |
+| npm registry（可用 `DSHG_NPM_MIRROR` 改） | 版本、下载量、兼容性事实 |
+| GitHub API（可用 `DSHG_GITHUB_PROXY` 走你的代理） | 更新日志、仓库信息 |
+| 你配置的 WebDAV / Gist | **只在你点击同步时** |
+
+**它执行什么子进程**
+
+- `dsh plugin --profile <p> add|remove|…`：把 pnpm 参数**原样转发**给宿主 CLI，安装逻辑不自己实现
+- Desktop 形态下可选调用宿主提供的 `desktopPnpm` 服务
+- 安装子进程有超时与"杀掉后等待落定"的兜底（`DSHG_INSTALL_TIMEOUT_MS` / `DSHG_KILL_SETTLE_MS`）
+
+**它暴露什么**
+
+- 所有 HTTP 端点挂在 `/dsh-galaxy` 前缀下（默认只监听宿主已暴露的地址）
+- **所有变更路由校验同源**；破坏性路由（重启、自我卸载、备份下载）额外要求 **loopback** 且拒绝代理转发
+- 公开更新 API v1（`/dsh-galaxy/api/v1/*`）供 CI/脚本使用，稳定性标注为 `beta`
+
+**不会做的事**
+
+- **无遥测**：不采集使用数据、不上报统计、不发任何"心跳"
+- **不落盘凭据**：WebDAV/Gist 凭据由宿主设置或环境变量提供，插件不写入自己的状态文件；日志导出会脱敏
+- **不默认重启宿主**：`allowRestart` 默认未配置即视为关闭；宿由 launchd（或其它 supervisor）托管时，
+  只有你显式设为 `true` 才允许自重启 —— 避免和托管方抢夺进程所有权
+- **无 postinstall 脚本**；发布物只含 `lib/`、`src/`、`client/`、`cordis.patch.yml`、`LICENSE`
+- **失败不改宿主**：客户端 error boundary + 服务端逐路由捕获，本插件异常不影响宿主启动
 
 ## 5. 配置
 
 | 配置 | 来源 | 默认 | 作用 |
 |---|---|---|---|
-| `profile` | cordis config / `--profile` / Desktop 宿主 | `web` | 被管理的 profile |
-| `profileDirectory` | Desktop 宿主注入 | 由 `DSH_HOME` 推导 | 显式 profile 目录 |
-| `allowRestart` | cordis config / settings | 未配置 | 一键重启开关；supervisor 下未显式开启即禁用 |
+| `profile` | cordis config / 宿主 | `web` | 被管理的 profile |
+| `allowRestart` | cordis config / 设置项 | 未配置（=禁用） | 一键重启开关 |
 | `maxSnapshots` | cordis config | `20` | 每 profile 保留快照数 |
-| `DSHG_REGISTRY_URL` | 环境变量 | `https://awesome-dsh-plugin.com/plugins.json` | 自定义 catalog |
-| `DSHG_SITE_URL` | 环境变量 | 未设置（或由 catalog 的 origin 推导） | 你的插件官网基址；设置后星系里每个插件都链到 `<基址>/#/ai/p/<owner%2Fname>`（见 `docs/site-linkage.md`） |
+| `DSHG_REGISTRY_URL` | 环境变量 | 内置公共目录 | 自定义 catalog |
+| `DSHG_SITE_URL` | 环境变量 | 未设置（由 catalog origin 推导） | 插件官网基址；设置后每张卡片都深链到 `<基址>/#/ai/p/<owner%2Fname>` |
 | `DSHG_NPM_MIRROR` | 环境变量 | 未设置 | 覆盖 npm registry 基址 |
 | `DSHG_GITHUB_PROXY` | 环境变量 | 未设置 | 操作员托管的 GitHub 前缀代理（设置后 UI 锁定） |
-| `DSHG_UPDATES_ORIGIN` | 环境变量 | `https://awesome-dsh-plugin.com/updates.json` | release notes 来源 |
+| `DSHG_UPDATES_ORIGIN` | 环境变量 | 内置 | release notes 来源 |
 | `DSHG_INSTALL_TIMEOUT_MS` | 环境变量 | 15 分钟 | 安装子进程超时 |
-| `DSHG_KILL_SETTLE_MS` | 环境变量 | 10 秒 | 杀掉安装子进程后，等待其落定的兜底时限（超时即带着已有输出返回，避免请求与 mutation 锁被永久占住） |
+| `DSHG_KILL_SETTLE_MS` | 环境变量 | 10 秒 | 杀进程后等待落定的兜底时限 |
 | `DSHG_DISCOVERY_TTL_MS` | 环境变量 | 6 小时 | 兼容性事实缓存 TTL |
-| `DSH_HOST_VERSION` | 环境变量 | 自动探测 | 显式覆盖宿主版本（**宿主自己从不设置它**；未设置时按 profile 自身 `node_modules` → 共享依赖锚点 `~/.dsh/profiles/node_modules/@deepseek-ai/dsh-base` 顺序读取） |
-| `catalogUrl` | `<profile>/.dsh-galaxy/state.json` | 未设置 | **profile 级**目录数据源（优先级低于 `DSHG_REGISTRY_URL`，高于内置公共目录） |
-| `siteUrl` | `<profile>/.dsh-galaxy/state.json` | 未设置 | **profile 级**官网基址（优先级低于 `DSHG_SITE_URL`） |
+| `DSH_HOST_VERSION` | 环境变量 | 自动探测 | 显式覆盖宿主版本（宿主自身从不设置它） |
+| `catalogUrl` / `siteUrl` | `<profile>/.dsh-galaxy/state.json` | 未设置 | profile 级目录/官网地址（优先级低于同名环境变量） |
 | `DSH_HOME` | 环境变量 | `~/.dsh` | profile 根目录 |
-| `HTTP(S)_PROXY` / `NO_PROXY` | 环境变量 | 未设置 | 市场出站与 pnpm 子进程代理 |
+| `HTTP(S)_PROXY` / `NO_PROXY` | 环境变量 | 未设置 | 出站与 pnpm 子进程代理 |
 
-## 6. 公共更新 API v1
+## 6. 常见问题
 
-外部客户端（CI、桌面壳、脚本）使用版本化契约：
+| 现象 | 原因 / 处理 |
+|---|---|
+| 设置里看不到「插件星系」 | 装完必须**完整重启宿主**；确认 profile 里已启用（面板「已安装」或 `dsh plugin --profile web list`） |
+| 目录是旧的 / 有新插件看不到 | 面板右上「刷新」强制重新校验（ETag）；或检查 `catalogUrl` 指向 |
+| 更新检查说"不检查更新" | 该插件是从本地 tarball（`file:`）装的，没有可比对的远端版本 |
+| 兼容性显示"未知" | 尚未拿到该包的 manifest 事实（首次会异步探测，之后按 TTL 缓存） |
+| 安装失败 | 面板会给出 pnpm 的原始输出；确认网络与 registry，必要时配置 `DSHG_NPM_MIRROR` / `HTTP(S)_PROXY` |
+| 面板显示"界面崩溃了" | 恢复面板可导出脱敏日志；把日志附在 issue 里即可复现 |
 
+## 7. 开发与发版门禁
+
+```bash
+npm run typecheck        # 服务端 + 客户端两套 tsconfig
+npm run build            # tsc → lib/，tsdown → client/client.js
+npm test                 # vitest
+npm run smoke:client     # 按 __ModuleLoader__ 契约求值客户端 bundle 并渲染每个界面
+npm run verify:dist      # 打包产物体检（入口/exports/patch/lib 引用/externals/files）
+npm run check:desensitization   # 合规扫描（发布物与仓库面无内部标识/凭据/本机路径）
+npm run check:host-surface      # 逐条核对宿主契约（slot/primitive/图标/令牌/peer/宿主补丁）
+npm run check:host-settings     # 真实宿主 settings 服务下的设置接线
+npm run check:layout            # 真 Chrome 布局探针（并给出"修复前"对照）
+npm run screenshots             # 重新生成 README 截图（真宿主组件 + 真 client bundle）
+npm run release                 # 以上全部 + npm pack
 ```
-GET  /dsh-galaxy/api/v1/capabilities
-GET  /dsh-galaxy/api/v1/updates?name=&force=
-POST /dsh-galaxy/api/v1/updates           { packageName, force }
-GET  /dsh-galaxy/api/v1/operations?operationId=
-POST /dsh-galaxy/api/v1/rollback          { operationId }
-POST /dsh-galaxy/api/v1/restart
-POST /dsh-galaxy/api/v1/cancelling        { operationId }
-```
 
-稳定性为 `beta`：形状可能变化，`capabilities` 会声明当前特性集与限制。
+CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）跑的就是 `npm run release` 的每一步，
+本地与 CI 不会漂移。测试与门禁的判据写在各自脚本的顶部注释里（含"这条断言为什么不是空过的"）。
 
-## 7. 文档地图
+## 8. 文档地图
 
 | 想了解 | 看这里 |
 |---|---|
-| 它有哪些能力、怎么用 | 本文件 §1–§3 |
-| 服务端契约：路由、对象、规则、状态文件、错误语义 | `docs/implementation-contract.md` |
-| 客户端契约：宿主槽位、组件结构、文案与布局约束 | `docs/client-contract.md` |
-| 与官网页面的联动（目录格式、推荐块、深链） | `docs/site-linkage.md` |
-| 宿主补丁清单与核对方式 | `docs/host-patches.md` |
-| 宿主版本兼容（0.1.5-rc.2 ↔ 0.2.1-alpha.1 的差异与运行时兜底） | `docs/host-compatibility.md` |
+| 服务端契约：路由、对象、规则、状态文件、错误语义 | [`docs/implementation-contract.md`](docs/implementation-contract.md) |
+| 客户端契约：槽位、组件结构、文案与布局约束 | [`docs/client-contract.md`](docs/client-contract.md) |
+| 与官网页面的联动（目录格式、推荐块、深链） | [`docs/site-linkage.md`](docs/site-linkage.md) |
+| 宿主版本兼容（两代差异与运行时兜底） | [`docs/host-compatibility.md`](docs/host-compatibility.md) |
+| 宿主补丁清单与核对方式 | [`docs/host-patches.md`](docs/host-patches.md) |
+| 规范与实现的映射 | [`docs/spec-implementation-mapping.md`](docs/spec-implementation-mapping.md) |
 
-## 8. 许可与作者
+English overview: [`README.en.md`](README.en.md)
 
-MIT，见 `LICENSE`（Copyright © 2026 AndyPBI）。
+## 9. 许可与作者
+
+MIT，见 [`LICENSE`](LICENSE)（Copyright © 2026 AndyPBI）。
 
 - 维护者：AndyPBI · <dalianyunhai@gmail.com>
 - 仓库与问题反馈：<https://github.com/AndyPBI/dsh-plugin-galaxy>
-- 第三方归属说明：`THIRD-PARTY-NOTICES.md`
+- 第三方归属说明：[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)
+
+> 插件目录与排名由社区站点 <https://www.yhaigc.cn> 提供；本插件与该站点无隶属关系，
+> 目录地址可用环境变量替换为任何兼容的 catalog。
