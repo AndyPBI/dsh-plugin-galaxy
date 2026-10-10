@@ -13,6 +13,7 @@ import { createElement as h } from 'react'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './Galaxy.module.css'
 import { en, NS, zh } from './locales.ts'
+import { ICON_ALTERNATIVES } from './icons.ts'
 import { InstallToast } from './InstallToast.tsx'
 import { GalaxyErrorBoundary } from './ErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
@@ -48,13 +49,43 @@ export const REQUIRED_PRIMITIVES = [
   'Input',
   'Modal',
   'Toast',
-  'IconRefreshOutline14',
-  'IconSearchOutline16',
-  'IconSparkle16',
 ] as const
 
-export function missingPrimitives(mod: Record<string, unknown>, required: readonly string[] = REQUIRED_PRIMITIVES): string[] {
-  return required.filter(name => mod[name] === undefined)
+/**
+ * Icons, each with every spelling the host has shipped for that glyph.
+ *
+ * 0.1.5-rc.2 named them by size (`IconSearchOutline16`), 0.2.1-alpha.1 by weight
+ * (`IconSearchOutlineRegular`) and dropped the old names — requiring either
+ * spelling alone would skip registration (and so hide the whole panel) on the
+ * other host. Any one name per group is enough; `icons.ts` resolves which.
+ */
+export const REQUIRED_ICON_ALTERNATIVES = ICON_ALTERNATIVES
+
+/**
+ * Whether a 0.2.x plugin-detail page is about THIS plugin.
+ *
+ * The detail seat renders for every plugin's page, so an entry that does not
+ * check the subject would put the galaxy's card (backup, WebDAV, self-uninstall)
+ * on someone else's page. `kind: 'item'` addresses an official plugin by the id
+ * its own seat chose — never ours, so it is not a match.
+ */
+export function isOwnPluginSubject(subject: unknown): boolean {
+  if (typeof subject !== 'object' || subject === null) return false
+  const candidate = subject as { kind?: unknown; pkg?: { name?: unknown } }
+  if (candidate.kind !== 'bundle' && candidate.kind !== 'row') return false
+  return candidate.pkg?.name === NS
+}
+
+export function missingPrimitives(
+  mod: Record<string, unknown>,
+  required: readonly string[] = REQUIRED_PRIMITIVES,
+  alternatives: ReadonlyArray<readonly string[]> = REQUIRED_ICON_ALTERNATIVES,
+): string[] {
+  const gaps = required.filter(name => mod[name] === undefined)
+  for (const group of alternatives) {
+    if (!group.some(name => mod[name] !== undefined)) gaps.push(group.join(' | '))
+  }
+  return gaps
 }
 
 /** The host surface the settings card needs, present only on rc.7+. */
@@ -188,6 +219,28 @@ export function apply(ctx: GalaxyClientContext): void {
       },
     })))
   })
+
+  // The same card on 0.2.x, where `settings.plugin.item` no longer exists: the
+  // plugins page renders contributions to a detail page's own content and each
+  // entry decides from the subject whether it has anything to say. `slots.inject`
+  // is the gate — the seat is declared by ui-plugin-manager at runtime, and
+  // registering an undeclared slot throws, so on rc.2 this callback simply never
+  // runs (the card stays reachable through the seat above).
+  ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
+    name: 'plugins.detail.section',
+    id: 'galaxy',
+    order: 50,
+    label: () => t('nav'),
+  }, (ownerProps: { subject?: unknown } = {}) => (isOwnPluginSubject(ownerProps.subject)
+    ? h(SettingsCard, {
+      t,
+      onRemoved: () => {
+        const off = retireSection
+        retireSection = null
+        off?.()
+      },
+    })
+    : null)))
 
   const ToastHost = () => h(InstallToast, { t })
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({

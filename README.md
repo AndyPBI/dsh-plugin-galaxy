@@ -18,6 +18,7 @@
 | 「推荐」视图 | 显示官网目录给出的**综合推荐前 20 条**（按 `ranking.top` 名次、跳过已安装并自动补位），每张卡片印 `#1`、`#2`、`#3`… 名次，另带分档徽标与"为什么推荐"；完整目录见「全部」。目录不带推荐块时这个入口退回「未安装」标签与完整列表。见 `docs/client-contract.md` §6.6 |
 | 排序菜单 | 只有 名称 / Star 数 / npm 下载量 / 发布时间（各升降序）——「推荐」是视图不是排序，菜单里没有"推荐分"；「推荐」视图隐藏排序下拉（顺序由 `ranking.top` 决定）。见 `docs/client-contract.md` §6.7、`docs/site-linkage.md` §四之二 |
 | 宿主补丁 | 升级宿主会丢掉**本机补丁**（如侧栏条目垂直排列）；清单与核对方式见 `docs/host-patches.md`，`npm run check:host-surface` 会逐条自动检查 |
+| 宿主版本 | 同时支持 **0.1.5-rc.2** 与 **0.2.1-alpha.1** 两代（图标改名、设置卡片座位、插件设置项三处差异都在运行时兜底）；清单见 `docs/host-compatibility.md` |
 | 面板形态 | 打开即是市场：副标题 + 搜索/筛选/排序 + 卡片。**没有标签栏，也没有常驻状态条**；五个筛选状态（全部/推荐/已安装/可更新/不兼容）**都是同一套卡片网格**，进度/取消/回滚在有活动时自动出现。见 `docs/client-contract.md` §5 |
 | 客户端 | React 18 + tsdown 打包的 `client/client.js`，注入宿主设置对话框 |
 | 数据存储 | 文件系统（`<profile>/.dsh-galaxy/`），无 SQL、无 ORM |
@@ -163,6 +164,7 @@ POST /dsh-galaxy/api/v1/cancelling        { operationId }
 | 客户端契约：宿主槽位、组件结构、文案与布局约束 | `docs/client-contract.md` |
 | 与官网页面的联动（目录格式、推荐块、深链） | `docs/site-linkage.md` |
 | 宿主补丁清单与核对方式 | `docs/host-patches.md` |
+| 宿主版本兼容（0.1.5-rc.2 ↔ 0.2.1-alpha.1 的差异与运行时兜底） | `docs/host-compatibility.md` |
 
 ## 8. 许可与作者
 

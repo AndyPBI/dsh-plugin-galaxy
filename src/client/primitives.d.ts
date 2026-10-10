@@ -152,6 +152,17 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
   export function IconCodeOutline16(props: IconProps): ReactElement
   export function IconCordisPluginOutline14(props: IconProps): ReactElement
   export function IconLoadingOutline16(props: IconProps): ReactElement
+
+  /* 0.2.x renamed every glyph from a SIZE suffix to a WEIGHT suffix and dropped
+   * the old names entirely (no aliases), so both spellings are declared here and
+   * `icons.ts` resolves the one the running host provides. The `| undefined` is
+   * the point: reading a name this host does not ship yields undefined. */
+  export const IconSearchOutlineRegular: ((props: IconProps) => ReactElement) | undefined
+  export const IconRefreshOutlineRegular: ((props: IconProps) => ReactElement) | undefined
+  export const IconSparkleRegular: ((props: IconProps) => ReactElement) | undefined
+  export const IconSearchOutlineMedium: ((props: IconProps) => ReactElement) | undefined
+  export const IconRefreshOutlineMedium: ((props: IconProps) => ReactElement) | undefined
+  export const IconSparkleMedium: ((props: IconProps) => ReactElement) | undefined
   export function IconLinkOutline14(props: IconProps): ReactElement
   export function IconLinkOutline16(props: IconProps): ReactElement
   export function IconDownloadOutline16(props: IconProps): ReactElement

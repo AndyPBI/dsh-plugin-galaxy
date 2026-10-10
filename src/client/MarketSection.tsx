@@ -11,13 +11,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import {
-  Button,
-  IconRefreshOutline14,
-  IconSearchOutline16,
-  Input,
-  Modal,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+// Icons come from the runtime resolver: the host renamed every glyph in 0.2.x
+// (size suffix → weight suffix), so a static name would be gone on one of them.
+import { IconRefresh, IconSearch } from './icons.ts'
 import css from './Galaxy.module.css'
 import { NS } from './locales.ts'
 import {
@@ -568,7 +565,7 @@ function Toolbar(props: {
     <div className={css.toolbar}>
       <Input
         className={css.search}
-        icon={<IconSearchOutline16 size={14} />}
+        icon={<IconSearch size={14} />}
         value={query}
         placeholder={placeholder}
         aria-label={placeholder}
@@ -611,7 +608,7 @@ function Toolbar(props: {
       <Button
         variant="outline"
         size="sm"
-        icon={<IconRefreshOutline14 size={13} />}
+        icon={<IconRefresh size={13} />}
         onClick={onReload}
         disabled={busy}
         title={busy ? t('busyWait') : t('reload')}
@@ -2266,7 +2263,7 @@ export function MarketSection(props: {
             <Button
               variant="outline"
               size="sm"
-              icon={<IconRefreshOutline14 size={13} />}
+              icon={<IconRefresh size={13} />}
               onClick={patchInventory}
               disabled={anyBusy}
             >

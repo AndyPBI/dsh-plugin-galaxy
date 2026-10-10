@@ -44,9 +44,9 @@ const primitivesStub = {
   Input: () => null,
   Modal: props => props.children ?? null,
   Toast: () => null,
-  IconRefreshOutline14: () => null,
-  IconSearchOutline16: () => null,
-  IconSparkle16: () => null,
+  IconRefreshOutlineRegular: () => null,
+  IconSearchOutlineRegular: () => null,
+  IconSparkleRegular: () => null,
 }
 
 const moduleTable = {
@@ -184,6 +184,14 @@ const required = registered?.mod?.REQUIRED_PRIMITIVES
 if (Array.isArray(required)) {
   const missingInStub = required.filter(name => primitivesStub[name] === undefined)
   check('REQUIRED_PRIMITIVES contains only members the host provides', missingInStub.length === 0, missingInStub.join(', '))
+}
+// Icons are resolved per host (0.2.x renamed every glyph), so the guard asks for
+// ONE name per group instead of one fixed spelling. The stub carries the 0.2.x
+// names, which is exactly the case that used to skip registration entirely.
+if (typeof registered?.mod?.missingPrimitives === 'function' && Array.isArray(required)) {
+  const gaps = registered.mod.missingPrimitives(primitivesStub)
+  check('the primitives guard is satisfied by the stub (stable members + one icon spelling each)',
+    gaps.length === 0, gaps.join(', '))
 }
 
 console.log(failures.length === 0

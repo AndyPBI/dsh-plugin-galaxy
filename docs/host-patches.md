@@ -59,3 +59,11 @@ Plugin Galaxy **自己不占侧栏座位**（`sidebar.footer.action`）——这
 所以它的入口不在侧栏，而在 **设置对话框左侧的 “Plugin Galaxy”**。
 本清单里的补丁影响的是**其它插件**（workvista / knowledge / memory 等）在侧栏的排布，
 但侧栏乱到看不清时，会连带让人无法确认插件是否都已加载，所以它同样是本项目的部署前置条件。
+
+---
+
+## 升级记录
+
+| 日期 | 宿主版本 | P1（侧栏 footer 竖排） | 备注 |
+|---|---|---|---|
+| 2026-10-10 | 0.2.1-alpha.1（tag `dsh-v0.2.1-alpha.1`，分支 `upgrade/0.2.1-alpha.1`） | **仍需**，已在切换后重打并随 `pnpm run build` 生效 | 新代 `.footerActions` 依旧只有 `display: flex`，未上游化；`check:host-surface` 实测 `column with gap` PASS |

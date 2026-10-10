@@ -85,10 +85,13 @@ export function StateDot(props: Record<string, unknown>): ReactElement {
   return createElement('span', props)
 }
 
-/* Icons: the bundle dereferences three of them. */
+/* Icons: the bundle dereferences three of them, through the RUNTIME resolver in
+ * src/client/icons.ts. The stub ships the 0.2.x spelling (what the current host
+ * provides), so component tests exercise the new-name branch; the old-spelling
+ * fallback and the "neither exists" case are covered by the pure resolver test. */
 const icon = (name: string) => (props: Record<string, unknown>): ReactElement =>
   createElement('svg', { 'data-icon': name, ...props })
 
-export const IconRefreshOutline14 = icon('IconRefreshOutline14')
-export const IconSearchOutline16 = icon('IconSearchOutline16')
-export const IconSparkle16 = icon('IconSparkle16')
+export const IconRefreshOutlineRegular = icon('IconRefreshOutlineRegular')
+export const IconSearchOutlineRegular = icon('IconSearchOutlineRegular')
+export const IconSparkleRegular = icon('IconSparkleRegular')

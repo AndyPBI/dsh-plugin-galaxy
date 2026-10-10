@@ -78,14 +78,21 @@ const primitivesBlock = /export const REQUIRED_PRIMITIVES = \[([\s\S]*?)\]/u.exe
 const primitives = [...(primitivesBlock?.[1] ?? '').matchAll(/'([^']+)'/gu)].map(match => match[1])
 if (primitives.length === 0) skip('could not read REQUIRED_PRIMITIVES from src/client/index.ts')
 
-/** Slots we register, with the kind the catalogue must declare. */
-const SLOTS = [
-  { key: 'settings.section', kind: 'list' },
-  { key: 'settings.plugin.item', kind: 'keyed' },
-  { key: 'shell.overlay', kind: 'list' },
+/**
+ * Slots we register, as alternatives: the settings card has a seat per host
+ * generation (`settings.plugin.item` up to 0.1.5-rc.2, `plugins.detail.section`
+ * on 0.2.x), and ONE of each group must exist — requiring a fixed key would pin
+ * the plugin to a single host the way the size-suffixed icons did.
+ */
+const SLOT_GROUPS = [
+  [{ key: 'settings.section', kind: 'list' }],
+  [{ key: 'settings.plugin.item', kind: 'keyed' }, { key: 'plugins.detail.section', kind: 'list' }],
+  [{ key: 'shell.overlay', kind: 'list' }],
 ]
-for (const slot of SLOTS) {
-  if (!clientIndex.includes(`name: '${slot.key}'`)) skip(`expected slot ${slot.key} in src/client/index.ts`)
+for (const group of SLOT_GROUPS) {
+  if (!group.some(slot => clientIndex.includes(`name: '${slot.key}'`))) {
+    skip(`expected one of ${group.map(slot => slot.key).join(' / ')} in src/client/index.ts`)
+  }
 }
 
 /** Specifiers our bundle may require (from the tsdown externals, as shipped). */
@@ -128,6 +135,22 @@ const missingPrimitives = primitives.filter(name => !exported.has(name))
 check('every primitive this client uses is still exported by the host', missingPrimitives.length === 0,
   missingPrimitives.length === 0 ? `${String(primitives.length)} member(s): ${primitives.join(', ')}` : missingPrimitives.join(', '))
 
+/** Icon groups the client resolves at runtime: 0.2.x renamed every glyph from a
+ * size suffix to a weight suffix and dropped the old names, so one name per
+ * group is the contract — demanding a fixed spelling would pin the plugin to a
+ * single host generation. */
+const iconGroups = [...(read(join(workspace, 'src', 'client', 'icons.ts')) ?? '')
+  .matchAll(/\[\s*((?:'[^']+'\s*,?\s*)+)\]/gu)]
+  .map(match => [...match[1].matchAll(/'([^']+)'/gu)].map(entry => entry[1]))
+  .filter(group => group.length > 0)
+if (iconGroups.length === 0) skip('could not read ICON_ALTERNATIVES from src/client/icons.ts')
+const unsatisfiedIcons = iconGroups.filter(group => !group.some(name => exported.has(name)))
+check('every icon this client resolves exists in the host under one of its spellings',
+  unsatisfiedIcons.length === 0,
+  unsatisfiedIcons.length === 0
+    ? `${String(iconGroups.length)} group(s): ${iconGroups.map(group => group[0]).join(', ')}`
+    : unsatisfiedIcons.map(group => group.join(' | ')).join(', '))
+
 /* ------------------------------------------------------------------ *
  * 3. slot catalogue
  * ------------------------------------------------------------------ */
@@ -135,10 +158,18 @@ check('every primitive this client uses is still exported by the host', missingP
 const catalogPath = join(harness, 'packages', 'extensions', 'cordis-client-runner', 'src', 'client', 'slot-catalog.ts')
 const catalog = read(catalogPath)
 if (catalog === undefined) skip('harness slot-catalog.ts not found')
-for (const slot of SLOTS) {
-  const at = catalog.indexOf(`key: '${slot.key}'`)
-  const kind = at === -1 ? undefined : /kind: '([^']+)'/u.exec(catalog.slice(at, at + 400))?.[1]
-  check(`slot ${slot.key} exists with kind ${slot.kind}`, kind === slot.kind, kind === undefined ? 'missing from the catalogue' : `kind=${kind}`)
+const slotKind = (key) => {
+  const at = catalog.indexOf(`key: '${key}'`)
+  return at === -1 ? undefined : /kind: '([^']+)'/u.exec(catalog.slice(at, at + 400))?.[1]
+}
+for (const group of SLOT_GROUPS) {
+  const resolved = group.map(slot => ({ ...slot, kind: slotKind(slot.key) }))
+  const usable = resolved.find(slot => slot.kind === slot.kind && slot.kind !== undefined)
+  check(`one of ${group.map(slot => `${slot.key} (${slot.kind})`).join(' / ')} exists with that kind`,
+    usable !== undefined,
+    usable !== undefined
+      ? `${usable.key} kind=${usable.kind}`
+      : resolved.map(slot => `${slot.key}: ${slot.kind ?? 'missing'}`).join(', '))
 }
 
 /* ------------------------------------------------------------------ *

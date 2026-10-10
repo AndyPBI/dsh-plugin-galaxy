@@ -97,9 +97,65 @@ const settingsEntry = requireFile(
 const builtPlugin = requireFile(pluginEntry, 'the plugin under test (npm run build, or pass --plugin)')
 
 const { Context } = await import(pathToFileURL(realpathSync(cordisEntry)).href)
-const { SettingsProvider } = await import(pathToFileURL(realpathSync(settingsEntry)).href)
-const { GALAXY_SETTINGS_NS, installGalaxySettings } = await import(pathToFileURL(builtPlugin).href)
+const settingsModule = await import(pathToFileURL(realpathSync(settingsEntry)).href)
+const { SettingsProvider } = settingsModule
+const pluginModule = await import(pathToFileURL(builtPlugin).href)
+const { GALAXY_SETTINGS_NS, installGalaxySettings } = pluginModule
+// The entry (`lib/index.js`, next to the settings module) carries the cordis
+// `Config` export — the settings module never saw it.
+const entryPath = resolve(dirname(builtPlugin), '..', 'index.js')
+const entryModule = existsSync(entryPath) ? await import(pathToFileURL(entryPath).href) : {}
 console.log(`      plugin under test: ${builtPlugin}`)
+
+/*
+ * Two host generations own a plugin setting in two different ways:
+ *
+ *   rc.2  — the plugin registers a settings NAMESPACE and the host resolves it
+ *           (the whole check below). `SettingsProvider` is the seam.
+ *   0.2.x — that seam is gone. The host projects the entry's cordis `Config`
+ *           into a form, so what matters is that the export validates and that
+ *           the namespace wiring degrades to a no-op instead of throwing.
+ *
+ * Both are checked here, each against the generation that has it; requiring one
+ * shape is how the plugin would end up working on exactly one host.
+ */
+if (typeof SettingsProvider !== 'function') {
+  console.log('      host generation: 0.2.x (no settings namespace seam — Config projection)')
+  const { Config } = entryModule
+  check('the entry exports a Config schema the host can project', typeof Config === 'object' && Config !== null)
+  const standard = Config?.['~standard']
+  check('Config speaks Standard Schema v1', standard?.version === 1 && typeof standard?.validate === 'function')
+
+  const empty = standard?.validate({})
+  check('an absent config resolves to an empty object', empty?.issues === undefined && JSON.stringify(empty?.value) === '{}',
+    JSON.stringify(empty))
+  const full = standard?.validate({ profile: 'web', allowRestart: true, maxSnapshots: 3 })
+  check('a full config passes through unchanged',
+    JSON.stringify(full?.value) === JSON.stringify({ profile: 'web', allowRestart: true, maxSnapshots: 3 }),
+    JSON.stringify(full))
+  check('a wrong type is rejected with a message',
+    Array.isArray(standard?.validate({ allowRestart: 'yes' })?.issues),
+    JSON.stringify(standard?.validate({ allowRestart: 'yes' })))
+  check('unknown keys are dropped instead of failing the entry load',
+    JSON.stringify(standard?.validate({ nope: 1 })?.value) === '{}',
+    JSON.stringify(standard?.validate({ nope: 1 })))
+
+  // The rc.2 path must be inert here: a settings service without `register`
+  // (what 0.2.x ships) may not log a warning, throw, or leave a pending effect.
+  const inertCtx = new Context()
+  inertCtx.provide?.('settings', { describe: () => [], update: async () => {} })
+  let wiringThrew = false
+  try {
+    installGalaxySettings(inertCtx, { allowRestart: true })
+    await new Promise(resolve => setTimeout(resolve, 50))
+  } catch (error) {
+    wiringThrew = true
+  }
+  check('the rc.2 namespace wiring is a silent no-op on 0.2.x', wiringThrew === false)
+
+  console.log(failures === 0 ? '\nHOST SETTINGS CHECK: PASS' : `\nHOST SETTINGS CHECK: FAIL (${failures})`)
+  process.exit(failures === 0 ? 0 : 1)
+}
 
 /** Minimal writable in-memory provider, mirroring the host's own test double. */
 class MemorySettings extends SettingsProvider {

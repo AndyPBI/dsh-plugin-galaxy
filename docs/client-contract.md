@@ -278,7 +278,29 @@ CSS 变量**不会报错**：写了一个宿主没定义的 `--dsw-alias-*` 名�
 分数与分项（`score` / `band` / `scoreParts` / `pinReason`）同样由目录提供；公式、权重与人工复核在站点侧
 （`docs/plugin-ranking.md`），插件只负责"按名次渲染 + 解释来源"。
 
-### 6.7 卡片标题与搜索用官网下发的 `displayName`
+### 6.7 宿主图标按运行时解析（两代宿主通用）
+
+宿主在 0.2.x 把整套图标从**按尺寸命名**改成**按字重命名**（`IconSearchOutline16` →
+`IconSearchOutlineRegular`），旧名字全部删除且没有别名。图标是外部模块的具名导出，缺的那个
+是 `undefined`，而本插件"缺 primitive 就不注册"的守卫会让**整块面板消失**（静默失效）。
+
+| 规则 | 原因 |
+|---|---|
+| 三个图标（搜索/刷新/星标）一律从 `src/client/icons.ts` 取，按候选名列表运行时解析（新名在前） | 一次构建同时适配两代宿主；静态具名 import 会在其中一代变成 `undefined` |
+| `REQUIRED_PRIMITIVES` 只放两代都有的稳定成员；图标用**分组"任一即可"**（`ICON_ALTERNATIVES`）判定 | 用固定拼写做门禁＝把插件钉死在单一宿主代 |
+| `primitives.d.ts` 同时声明两代拼写（新名标 `\| undefined`） | 编译期两代都通过，解析留给运行时 |
+
+### 6.8 设置卡片的两个座位（旧代 keyed / 新代 detail section）
+
+| 宿主 | 座位 | 闸门 |
+|---|---|---|
+| ≤ 0.1.5-rc.2 | 服务 `settingsScope` + keyed 槽位 `settings.plugin.item`（按包名占位） | 嵌套 `inject(['settingsScope'], …)`：没有该服务就不进回调 |
+| ≥ 0.2.1-alpha.1 | `plugins.detail.section`（list，ownerProps `{ subject }`，由 ui-plugin-manager 声明） | `slots.inject('plugins.detail.section', …)`：座位未声明就不会触发（**注册未声明的槽位会抛错**） |
+
+新座位里用 `isOwnPluginSubject(subject)` 只在自己的插件页渲染：`kind: 'bundle' | 'row'` 且
+`pkg.name === 'dsh-plugin-galaxy'`；`kind: 'item'`（官方插件按自身 id 编址）不匹配——否则卡片会出现在别人的插件页上。
+
+### 6.9 卡片标题与搜索用官网下发的 `displayName`
 
 monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepseek-harness`）：可读性差，
 官网把它展示成 `#` 换空格。这条规则**现在由产物携带**（`displayName`），面板直接读：
@@ -289,7 +311,7 @@ monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepse
 | **身份一律不用展示名**：安装 spec、`key`、深链接、inventory 匹配仍用 `name`/`npm`/`key` | `key === owner/name` 是目录契约，深链接已分享；展示名是官网可以随手重塑的 |
 | 搜索同时认展示名与原始名（haystack 里两个都放） | 用户会照官网的写法搜，也会照 npm 的写法搜 |
 
-### 6.8 排序菜单里没有"推荐"
+### 6.10 排序菜单里没有"推荐"
 
 「推荐」是一个**视图**，不是一种排序：排序下拉保持名称 / Star 数 / npm 下载量 / 发布时间四项（各升降序），
 **不加"推荐分"**。

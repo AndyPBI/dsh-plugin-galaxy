@@ -25,7 +25,57 @@ import { logEvent } from './core/log.ts'
 export const name = 'dsh-plugin-galaxy'
 
 /** Optional cordis configuration; the profile defaults to `web`. */
-export type Config = Partial<Pick<GalaxyMountConfig, 'profile' | 'allowRestart' | 'maxSnapshots'>>
+export interface GalaxyPluginConfig {
+  profile?: string
+  allowRestart?: boolean
+  maxSnapshots?: number
+}
+
+/**
+ * The configuration schema the host reads for this entry.
+ *
+ * Two host generations, two ways to own a setting:
+ *   - up to 0.1.5-rc.2 the plugin registered a settings NAMESPACE
+ *     (`settings.register`, still done by `installGalaxySettings`);
+ *   - 0.2.x removed that seam and projects the entry's cordis `Config` into a
+ *     form on its Plugins page instead — exporting this schema is what puts
+ *     `allowRestart` there.
+ *
+ * Both paths feed `apply(ctx, config)`, so the value is read the same way on
+ * either host and the switch survives the upgrade. Hand-rolled Standard Schema
+ * (v1) rather than a schemastery import: the host validates through
+ * `~standard.validate`, this keeps the plugin free of a hard runtime dependency,
+ * and unknown keys are dropped instead of failing an entry load.
+ */
+export const Config = {
+  '~standard': {
+    version: 1 as const,
+    vendor: 'dsh-plugin-galaxy',
+    validate(value: unknown): { value: GalaxyPluginConfig } | { issues: { message: string }[] } {
+      if (value === undefined || value === null) return { value: {} }
+      if (typeof value !== 'object' || Array.isArray(value)) {
+        return { issues: [{ message: 'dsh-plugin-galaxy: configuration must be an object' }] }
+      }
+      const input = value as Record<string, unknown>
+      const out: GalaxyPluginConfig = {}
+      const issues: { message: string }[] = []
+      if (input.profile !== undefined) {
+        if (typeof input.profile !== 'string') issues.push({ message: 'profile must be a string' })
+        else out.profile = input.profile
+      }
+      if (input.allowRestart !== undefined) {
+        if (typeof input.allowRestart !== 'boolean') issues.push({ message: 'allowRestart must be a boolean' })
+        else out.allowRestart = input.allowRestart
+      }
+      if (input.maxSnapshots !== undefined) {
+        if (typeof input.maxSnapshots !== 'number' || !Number.isFinite(input.maxSnapshots)) {
+          issues.push({ message: 'maxSnapshots must be a finite number' })
+        } else out.maxSnapshots = input.maxSnapshots
+      }
+      return issues.length > 0 ? { issues } : { value: out }
+    },
+  },
+}
 
 /** Structural subset of DSH Desktop's public `desktopProfiles` contract. */
 interface DesktopProfilesLike {
@@ -80,7 +130,7 @@ function optionalLogger(ctx: Context): { logger?: HostLogger } {
  * @param ctx - Host context that may acquire webServer and loader services.
  * @param config - Optional profile override from the loader.
  */
-export function apply(ctx: Context, config?: Config): void {
+export function apply(ctx: Context, config?: GalaxyPluginConfig): void {
   ctx.inject(['webServer', 'loader'], (hostCtx: Context) => {
     // Only INJECTED services may be read off a cordis context: any other
     // property access throws (`cannot get property "x" without inject`), and an
