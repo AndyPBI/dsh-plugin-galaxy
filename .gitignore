@@ -22,3 +22,7 @@ site/index.html.bak
 /plantodo.md
 /docs/pre-install-audit.md
 /.screenshots/
+
+# 本地凭证：绝不进仓库
+github token.txt
+*github*token*
