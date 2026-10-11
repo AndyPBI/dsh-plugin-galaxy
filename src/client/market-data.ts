@@ -91,11 +91,28 @@ export interface RegistryRanking {
   pins?: Array<{ key: string; reason: string }>
 }
 
+/**
+ * One category as the site publishes it: slug + labels (+ its own count).
+ * Mirrors the server type; the client bundle never imports server modules.
+ */
+export interface RegistryCategory {
+  /** Slug rows refer to. */
+  id: string
+  label?: string
+  labelEn?: string
+  count?: number
+}
+
 export interface Registry {
   plugins: RegistryPlugin[]
   /** Recommendations, when the catalog ships them. */
   ranking?: RegistryRanking
-  categories?: string[]
+  /**
+   * Category vocabulary published by the site: rows carry a slug, this table
+   * carries the label the card shows (see `categoryLabelOf`). Older catalogs
+   * shipped plain strings; the loader normalizes both shapes.
+   */
+  categories?: RegistryCategory[]
   updated?: string
   count?: number
   /** Present when the payload came from a local fixture. */

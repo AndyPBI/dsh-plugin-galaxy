@@ -205,9 +205,30 @@ export interface RegistryRanking {
   pins?: Array<{ key: string; reason: string }>
 }
 
+/**
+ * One category the catalog declares, as the site publishes it.
+ *
+ * The site owns the vocabulary: rows carry a `category` SLUG and this table maps
+ * it to the label users read (`label` / `labelEn`). Older catalogs shipped a bare
+ * string list, so the loader normalizes both into this shape — a plugin that
+ * only understood strings silently dropped the whole table and every card showed
+ * the raw slug.
+ */
+export interface RegistryCategory {
+  /** Slug rows refer to (`curated`, `cost`, …). */
+  id: string
+  /** Chinese label, when the catalog ships one. */
+  label?: string
+  /** English label, when the catalog ships one. */
+  labelEn?: string
+  /** How many rows carry this category, as counted by the site. */
+  count?: number
+}
+
 export interface Registry {
   plugins: RegistryPlugin[]
-  categories?: string[]
+  /** Category vocabulary: slug → labels. See {@link RegistryCategory}. */
+  categories?: RegistryCategory[]
   updated?: string
   count?: number
   /** Present when the payload came from a local fixture. */

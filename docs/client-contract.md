@@ -311,6 +311,18 @@ monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepse
 | **身份一律不用展示名**：安装 spec、`key`、深链接、inventory 匹配仍用 `name`/`npm`/`key` | `key === owner/name` 是目录契约，深链接已分享；展示名是官网可以随手重塑的 |
 | 搜索同时认展示名与原始名（haystack 里两个都放） | 用户会照官网的写法搜，也会照 npm 的写法搜 |
 
+### 6.9 分类徽标与搜索走官网下发的分类词表
+
+卡片上的「分类」不是 slug：目录顶层 `categories` 把 slug 映射到用户读的标签
+（`curated` → 甄选 / Featured）。面板按当前界面语种取 `label` 或 `labelEn`，
+**未知 slug 原样显示**（官网新加分类、词表还没到时，卡片不会空白）。
+
+| 规则 | 原因 |
+|---|---|
+| 徽标与搜索索引都走 `categoryText(plugin.category, registry.categories, english)`（`src/client/categories.ts`） | 官网是分类词表的唯一来源；面板自己硬编码一份就会两边漂移 |
+| 搜索同时认「标签」与「slug」 | 用户照官网的写法搜（甄选），也照数据写法搜（curated） |
+| 一行可带多个 slug（历史数据用 `, ` 连接），逐个解析后用 `、` / `, ` 连接 | 老目录的行是多分类 |
+
 ### 6.10 排序菜单里没有"推荐"
 
 「推荐」是一个**视图**，不是一种排序：排序下拉保持名称 / Star 数 / npm 下载量 / 发布时间四项（各升降序），

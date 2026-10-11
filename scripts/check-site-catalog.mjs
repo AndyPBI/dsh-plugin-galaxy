@@ -354,11 +354,45 @@ if (isUrl(catalogTarget)) {
     const unresolvedLoaded = top.filter(key => !loadedByKey.has(key))
     check('9.4  every top key resolves through the loader\'s own rows',
       unresolvedLoaded.length === 0, unresolvedLoaded.slice(0, 3).join(', '))
-    const loaderRows = registry.plugins.filter(row =>
-      typeof row.score !== 'number' || typeof row.band !== 'string'
-      || typeof row.scoreParts !== 'object' || row.scoreParts === null)
-    check('9.5  the loader keeps score / band / scoreParts on every row',
-      loaderRows.length === 0, loaderRows.slice(0, 3).map(row => row.name).join(', '))
+    /*
+     * Parity, not "every row is scored": `curated` rows are published unranked on
+     * purpose (see 7.12), so the check asks what the loader really owes — a field
+     * the payload carries survives the per-row rebuild — plus the ranked-row
+     * requirement mirrored from 7.12 after that rebuild.
+     */
+    const payloadByKey = new Map(plugins.map(row => [row?.key, row]))
+    const dropped = registry.plugins.filter(row => {
+      const source = payloadByKey.get(row.key)
+      if (source === undefined) return false
+      if (typeof source.score === 'number' && typeof row.score !== 'number') return true
+      if (typeof source.band === 'string' && typeof row.band !== 'string') return true
+      return source.scoreParts !== undefined && row.scoreParts === undefined
+    })
+    check('9.5  the loader keeps score / band / scoreParts for every scored row',
+      dropped.length === 0, dropped.slice(0, 3).map(row => row.name).join(', '))
+    const loaderUnranked = registry.plugins.filter(row =>
+      row.category !== 'curated'
+      && (typeof row.score !== 'number' || typeof row.band !== 'string'
+        || typeof row.scoreParts !== 'object' || row.scoreParts === null))
+    check('9.5b the loader keeps every ranked row scored (7.12 after the rebuild)',
+      loaderUnranked.length === 0, loaderUnranked.slice(0, 3).map(row => row.name).join(', '))
+    /*
+     * The vocabulary must survive the same rebuild the rows do: the panel looks a
+     * row's slug up in it, so a loader that drops the objects (a `typeof item ===
+     * 'string'` filter did exactly that) puts raw slugs back on every card.
+     */
+    const loadedVocabulary = Array.isArray(registry.categories) ? registry.categories : []
+    // Read from the payload here: section 11's list is declared further down, and a
+    // forward reference inside a `const` would be a TDZ crash.
+    const payloadVocabulary = Array.isArray(parsed?.categories)
+      ? parsed.categories.filter(entry => entry !== null && typeof entry === 'object')
+      : []
+    check('9.7  the loader keeps the category vocabulary (ids + labels)',
+      loadedVocabulary.length === payloadVocabulary.length
+      && payloadVocabulary.every((entry, index) => loadedVocabulary[index]?.id === entry.id
+        && loadedVocabulary[index]?.label === entry.label
+        && loadedVocabulary[index]?.labelEn === entry.labelEn),
+      `${String(loadedVocabulary.length)} vs ${String(payloadVocabulary.length)}`)
     check('9.6  the loader parses the pins (key + reason)',
       Array.isArray(registry.ranking?.pins) && registry.ranking.pins.length === pins.length
       && registry.ranking.pins.every(pin => typeof pin.key === 'string' && typeof pin.reason === 'string'),
@@ -392,6 +426,47 @@ if (existsSync(siteZhFile) && existsSync(siteEnFile)) {
 } else {
   console.log('SKIP  wording parity: the sibling website checkout is not present')
 }
+
+/* ---- 11. the category vocabulary the panel paints ---- */
+
+/*
+ * Rows carry a slug; the site ships the labels users read (`甄选` / `Featured`).
+ * The panel resolves the slug through this table, so a table that is missing an
+ * entry, a label, or a truthful count shows up as a raw slug on a card — the
+ * same class of drift `displayName` had for plugin names.
+ */
+const categoryEntries = Array.isArray(parsed?.categories) ? parsed.categories.filter(entry => entry !== null && typeof entry === 'object') : []
+const badCategoryIds = categoryEntries.filter(entry => typeof entry.id !== 'string' || entry.id.trim() === '')
+check('11.1 every categories[] entry carries a non-empty id',
+  badCategoryIds.length === 0, `${String(categoryEntries.length)} entr(ies)`)
+const unlabelled = categoryEntries.filter(entry =>
+  typeof entry.label !== 'string' || entry.label.trim() === ''
+  || typeof entry.labelEn !== 'string' || entry.labelEn.trim() === '')
+check('11.2 every category carries both labels (zh + en, so the panel never shows a slug)',
+  unlabelled.length === 0, unlabelled.slice(0, 3).map(entry => String(entry.id)).join(', '))
+const labelCounts = new Map()
+for (const entry of categoryEntries) {
+  for (const key of ['label', 'labelEn']) {
+    const label = typeof entry[key] === 'string' ? entry[key].trim() : ''
+    if (label !== '') labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1)
+  }
+}
+const repeatedLabels = [...labelCounts].filter(([, count]) => count > 1).map(([label]) => label)
+check('11.3 category labels are distinct (two categories must not read the same)',
+  repeatedLabels.length === 0, repeatedLabels.slice(0, 3).join(', '))
+const rowCounts = new Map()
+for (const row of plugins) {
+  const slug = typeof row?.category === 'string' ? row.category : ''
+  if (slug !== '') rowCounts.set(slug, (rowCounts.get(slug) ?? 0) + 1)
+}
+const miscounted = categoryEntries.filter(entry =>
+  typeof entry.count === 'number' && entry.count !== (rowCounts.get(entry.id) ?? 0))
+check('11.4 each category\'s published count matches its rows',
+  miscounted.length === 0,
+  miscounted.slice(0, 3).map(entry => `${String(entry.id)}: ${String(entry.count)} vs ${String(rowCounts.get(entry.id) ?? 0)}`).join(', '))
+const emptyCategories = categoryEntries.filter(entry => (rowCounts.get(entry.id) ?? 0) === 0)
+check('11.5 no declared category is empty (a vocabulary entry with no rows is dead weight)',
+  emptyCategories.length === 0, emptyCategories.slice(0, 3).map(entry => String(entry.id)).join(', '))
 
 /* ---- 6. show a few deep links a human can open ---- */
 const sample = plugins

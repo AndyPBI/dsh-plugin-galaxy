@@ -175,7 +175,13 @@ for (const file of files) {
       if (lineText.includes(`compliance-allow: ${rule.id}`)) continue
       const at = source.slice(0, match.index).split('\n').length
       const key = `${rule.id}\u0000${relative(workspace, file)}:${String(at)}`
-      if (!hits.has(key)) hits.set(key, { rule, file: relative(workspace, file), line: at, text: match[0] })
+      // Never echo a credential: this output ends up in issue reports and chat
+      // logs, and a second copy of the secret is a second place to leak it. Show
+      // the shape only — enough to find it, useless to an attacker.
+      const text = rule.id === 'credential'
+        ? `${match[0].slice(0, 4)}…(${String(match[0].length)} chars, redacted)`
+        : match[0]
+      if (!hits.has(key)) hits.set(key, { rule, file: relative(workspace, file), line: at, text })
     }
   }
 }

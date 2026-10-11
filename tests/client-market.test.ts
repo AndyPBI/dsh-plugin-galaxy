@@ -20,7 +20,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MarketSection } from '../src/client/MarketSection.tsx'
-import { en, translate } from '../src/client/locales.ts'
+import { en, translate, zh } from '../src/client/locales.ts'
 
 const t = (key: string, params?: Record<string, string | number>): string => translate(en, key, params)
 
@@ -946,5 +946,90 @@ describe('Discover — the label the website ships (displayName)', () => {
     typeInto(input, 'archify#integrations')
     await flush()
     expect(cardTitles(host)).toEqual(['archify integrations/deepseek-harness'])
+  })
+})
+
+describe('Discover — category labels follow the catalog', () => {
+  /**
+   * The site added a 「甄选」 category (slug `curated`, 8 plugins) and ships the
+   * vocabulary as `categories: [{id,label,labelEn,count}]` while rows carry only
+   * the slug. Cards used to print the slug, so a new category appeared as
+   * `curated` and the site could not rename one without the panel disagreeing —
+   * the same single-source-of-truth problem `displayName` had.
+   */
+  const ROWS = [
+    { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', displayName: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12, description: '地图式知识整理' },
+    { key: 'alpha/dsh-legacy', name: 'dsh-legacy', owner: 'alpha', category: 'made-up', stars: 3, description: '旧分类' },
+  ]
+  const TABLE = [{ id: 'curated', label: '甄选', labelEn: 'Featured', count: 8 }]
+
+  function installStub(): void {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, method: init?.method ?? 'GET' })
+      if (url.includes('/registry')) return json({ registry: { plugins: ROWS, count: ROWS.length, categories: TABLE } })
+      if (url.includes('/installed')) return json(INVENTORY)
+      if (url.includes('/updates')) return json([])
+      if (url.includes('/discovery-compatibility')) return json({ results: [] })
+      if (url.includes('/status')) {
+        return json({
+          boot: 'test-boot', version: '0.1.1', channel: 'stable', region: 'global', profile: 'web',
+          busy: false, progress: { active: false }, pnpm: { ok: true },
+          restart: { allowed: false, debugger: false, scheduled: false }, installed: [],
+        })
+      }
+      return json({ ok: true })
+    }) as typeof fetch
+  }
+
+  async function mountIn(language: 'zh' | 'en'): Promise<HTMLElement> {
+    installStub()
+    const dictionary = language === 'en' ? en : zh
+    const localeT = (key: string, params?: Record<string, string | number>): string => translate(dictionary, key, params)
+    const container = document.getElementById('host') as HTMLElement
+    root = createRoot(container)
+    root.render(createElement(MarketSection, {
+      t: localeT,
+      locale: {
+        register: () => undefined,
+        bind: () => localeT,
+        subscribe: () => () => undefined,
+        getSnapshot: () => ({ active: language }),
+      },
+      theme: { getTheme: () => ({ id: 'dark' }), setTheme: () => undefined },
+      themeStore: { subscribe: () => () => undefined, getSnapshot: () => ({ id: 'dark' }), getServerSnapshot: () => ({ id: 'dark' }) },
+    }))
+    await flush()
+    return container
+  }
+
+  function card(host: HTMLElement, title: string): string {
+    return host.querySelector(`article[aria-label="${title}"]`)?.textContent ?? ''
+  }
+
+  it('prints the published label in the active language', async () => {
+    const host = await mountIn('zh')
+    expect(card(host, 'dsh-atlas')).toContain('分类: 甄选')
+    expect(card(host, 'dsh-atlas')).not.toContain('curated')
+  })
+
+  it('switches to the English label with the host locale', async () => {
+    const host = await mountIn('en')
+    expect(card(host, 'dsh-atlas')).toContain('Category: Featured')
+  })
+
+  it('keeps showing an unknown slug instead of blanking the badge', async () => {
+    const host = await mountIn('zh')
+    expect(card(host, 'dsh-legacy')).toContain('分类: made-up')
+  })
+
+  it('finds the rows by the label the user reads', async () => {
+    const host = await mountIn('zh')
+    const input = [...host.querySelectorAll('input')]
+      .find(element => (element.getAttribute('aria-label') ?? '').startsWith('搜索')) as HTMLInputElement
+    expect(input).toBeDefined()
+    typeInto(input, '甄选')
+    await flush()
+    expect(cardTitles(host)).toEqual(['dsh-atlas'])
   })
 })

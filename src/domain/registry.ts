@@ -22,7 +22,7 @@ import { logEvent } from '../core/log.ts'
 import { profileDir } from '../core/paths.ts'
 import { readGalaxyState } from '../core/state.ts'
 import type { GalaxyRuntime } from '../core/runtime.ts'
-import type { Registry, RegistryPlugin } from '../core/types.ts'
+import type { Registry, RegistryCategory, RegistryPlugin } from '../core/types.ts'
 import { catalogFromPackage } from './catalog-npm.ts'
 
 /** Cache key inside `GalaxyRuntime` for the catalog validators. */
@@ -239,8 +239,32 @@ function asRegistry(value: unknown): Registry {
   const registry: Registry = { plugins, count: plugins.length }
   const updated = nonEmptyString(record.updated)
   if (updated !== undefined) registry.updated = updated
+  // The vocabulary the rows' `category` slugs are drawn from. The site ships
+  // objects `{id,label,labelEn,count}`; older catalogs shipped a bare string
+  // list, so both normalize here — dropping the objects (a `typeof item ===
+  // 'string'` filter did exactly that) is how every card fell back to printing
+  // the raw slug.
   if (Array.isArray(record.categories)) {
-    const categories = record.categories.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    const categories: RegistryCategory[] = []
+    for (const item of record.categories) {
+      if (typeof item === 'string') {
+        const id = item.trim()
+        if (id !== '') categories.push({ id })
+        continue
+      }
+      if (item === null || typeof item !== 'object') continue
+      const entry = item as { id?: unknown; label?: unknown; labelEn?: unknown; count?: unknown }
+      const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+      if (id === '') continue
+      const label = nonEmptyString(entry.label)
+      const labelEn = nonEmptyString(entry.labelEn)
+      categories.push({
+        id,
+        ...(label === undefined ? {} : { label }),
+        ...(labelEn === undefined ? {} : { labelEn }),
+        ...(typeof entry.count === 'number' && Number.isFinite(entry.count) ? { count: entry.count } : {}),
+      })
+    }
     if (categories.length > 0) registry.categories = categories
   }
   // The recommendation block must survive this rebuild: it is what the "未安装"

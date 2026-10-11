@@ -235,6 +235,12 @@ describe('a site catalog loaded through the real loader', () => {
       response.end(JSON.stringify({
         schema: 'pbi-plugin-catalog/1',
         plugins: rows,
+        categories: [
+          { id: 'curated', label: '甄选', labelEn: 'Featured', count: 8 },
+          'legacy-string',
+          { id: 'no-label' },
+          { label: 'missing id' },
+        ],
         ranking: { version: 'opc-ranking/1', window: 20, top: rows.map(row => row.key), pins: [{ key: 'o/r#packages/pkg', reason: '生态里独一份的能力' }] },
       }))
     })
@@ -269,6 +275,13 @@ describe('a site catalog loaded through the real loader', () => {
       expect(loaded.plugins[1]?.pinReason).toBe('生态里独一份的能力')
       // 展示名同样要穿过重建：漏掉它，面板就只能在卡片上显示带 `#` 的原始 name
       expect(loaded.plugins[1]?.displayName).toBe('r packages/pkg')
+      // The category vocabulary must survive the same rebuild: rows carry only the
+      // slug, so dropping the table leaves every card printing `curated`.
+      expect(loaded.categories?.map(entry => entry.id)).toEqual(['curated', 'legacy-string', 'no-label'])
+      expect(loaded.categories?.[0]).toEqual({ id: 'curated', label: '甄选', labelEn: 'Featured', count: 8 })
+      // A string entry is the pre-0.2 catalog shape; an entry with no id is junk.
+      expect(loaded.categories?.[1]).toEqual({ id: 'legacy-string' })
+      expect(loaded.categories?.[2]).toEqual({ id: 'no-label' })
       expect(loaded.plugins[0]?.displayName).toBeUndefined()
 
       const linked = linkedRegistryFor(runtime as never, loaded)

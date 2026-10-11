@@ -73,6 +73,32 @@ https://www.yhaigc.cn/#/ai/p/<encodeURIComponent(key)>
 { "ranking": { "version": "opc-ranking/1", "window": 20, "top": ["owner/name", ...], "pins": [{"key","reason"}] } }
 ```
 
+### 分类的 slug vs 标签（2026-10 修过的地方）
+
+站点在目录顶层下发**分类词表**，行里只放 slug：
+
+```jsonc
+{ "categories": [
+    { "id": "curated", "label": "甄选", "labelEn": "Featured", "count": 8 },
+    { "id": "service", "label": "服务与交易（客服 / 订阅 / 开票 / 支付）", "labelEn": "Service & Commerce", "count": 18 }
+  ],
+  "plugins": [ { "category": "curated", ... } ] }
+```
+
+| 字段 | 谁用 | 规则 |
+|---|---|---|
+| 行里的 `category` | 归类 | **slug**（`curated`），不是给人读的 |
+| `categories[].id` | 面板查表 | 与行里的 slug 对应；门禁 5 要求每行的 slug 都已声明 |
+| `categories[].label` / `labelEn` | 卡片徽标、搜索 | 面板按**当前界面语种**取用（en → `labelEn`），未知 slug 原样显示，不空白 |
+| `categories[].count` | 站点自检 | 与真实行数一致（门禁 11.4） |
+
+**为什么必须走词表**：面板曾经直接打印 slug —— 官网新加一个分类，面板上就成了 `分类: curated`，
+官网改个名字面板也不会跟随（与 `displayName` 同一类问题）。现在词表随目录下发，
+门禁 **9.7** 要求它穿过加载器的逐字段重建，**11.1–11.5** 要求每条都有中英标签、标签互不重复、计数真实。
+
+> `curated`（甄选）是**人工挑选、刻意不计分**的分类：这些行没有 `score`/`band`/`scoreParts`，
+> 也不进 `ranking.top`。门禁 7.12 与 9.5/9.5b 都按这条事实写的（只要求"载荷里有的不许丢"）。
+
 ### 行的身份 vs 行的标签（2026-09 修过的地方）
 
 | 字段 | 谁用 | 规则 |

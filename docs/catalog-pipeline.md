@@ -155,7 +155,7 @@ dsh-Plugin-Galaxy/catalog/            ← 随仓库提交
   .state/opc-state.json 上次的 kept/dropped 集合，用于变更摘要
 ```
 
-`OPC_CATALOG_DIR` 默认 `/Users/zhaojunping/Documents/9.Project/项目开发/opc-catalog`。
+`OPC_CATALOG_DIR` 未设置时回退到 `~/Documents/9.Project/项目开发/opc-catalog`（脚本用 `homedir()` 推导，不写死用户名）。
 
 ---
 

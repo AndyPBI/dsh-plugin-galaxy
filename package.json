@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-galaxy",
   "description": "Plugin Galaxy — visual plugin marketplace inside DeepSeek Harness: browse, search, and one-click install community plugins. · DSH 可视化插件星系：逛一逛，点一下，装好。",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

@@ -33,6 +33,7 @@
 
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -47,8 +48,8 @@ function arg(name, fallback) {
 }
 const flag = name => process.argv.includes(name)
 
-const catalogDir = resolve(process.env.OPC_CATALOG_DIR || '/Users/zhaojunping/Documents/9.Project/项目开发/opc-catalog')
-const frontendDir = resolve(process.env.PBI_FRONTEND_DIR || '/Users/zhaojunping/Documents/AI/PBISimulation-Frontend')
+const catalogDir = resolve(process.env.OPC_CATALOG_DIR || join(homedir(), 'Documents/9.Project/项目开发/opc-catalog'))
+const frontendDir = resolve(process.env.PBI_FRONTEND_DIR || join(homedir(), 'Documents/AI/PBISimulation-Frontend'))
 const topN = arg('--top', null)
 const dryRun = flag('--dry-run')
 const offline = flag('--offline')

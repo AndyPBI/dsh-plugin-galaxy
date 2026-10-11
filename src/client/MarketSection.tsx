@@ -40,6 +40,8 @@ import {
   updatePlugin,
   useSkin,
 } from './market-data.ts'
+import { categoryText, isEnglishLanguage } from './categories.ts'
+import type { RegistryCategory } from './market-data.ts'
 // Host-service and group vocabulary shapes live with the API client; importing
 // them (rather than re-declaring) keeps this file wired to the same types the
 // entry point passes in.
@@ -627,6 +629,10 @@ function PluginCard(props: {
   t: Translate
   row: DiscoverRow
   actions: MarketActions
+  /** The catalog's category vocabulary, for the label under the title. */
+  categories?: readonly RegistryCategory[]
+  /** Whether the English labels apply (see `isEnglishLanguage`). */
+  english?: boolean
 }) {
   const { t, row, actions } = props
   const { plugin, installed, update, compatibility, replacement } = row
@@ -688,7 +694,7 @@ function PluginCard(props: {
             <span className={css.tag} title={plugin.url ?? plugin.name}>{`${t('ownerLabel')}: ${plugin.owner}`}</span>
           )}
           {plugin.category !== undefined && plugin.category !== '' && (
-            <span className={css.tag}>{`${t('categoryLabel')}: ${plugin.category}`}</span>
+            <span className={css.tag}>{`${t('categoryLabel')}: ${categoryText(plugin.category, props.categories, props.english === true) ?? plugin.category}`}</span>
           )}
           {typeof plugin.stars === 'number' && (
             <span className={css.stars}>{`★ ${String(plugin.stars)}`}</span>
@@ -1247,7 +1253,14 @@ export function MarketSection(props: {
   // "Missing getServerSnapshot" whenever this tree is rendered outside the
   // browser (a server render, or the render-to-string smoke test), instead of
   // degrading. In the browser it is never called.
-  useSyncExternalStore(subscribeLocale, () => locale.getSnapshot().active, () => locale.getSnapshot().active)
+  const activeLanguage = useSyncExternalStore(
+    subscribeLocale,
+    () => locale.getSnapshot().active,
+    () => locale.getSnapshot().active,
+  )
+  // Category labels come from the catalog in both languages; the badge and the
+  // search index pick the one the active locale reads.
+  const english = isEnglishLanguage(activeLanguage)
   // Only the active theme id is subscribed to: comparing a primitive keeps
   // React's Object.is check stable even when the host rebuilds its snapshot.
   const readActiveThemeId = useCallback(
@@ -1753,7 +1766,7 @@ export function MarketSection(props: {
         const installed = matchInstalled(plugin, installedByName, installedByRepo)
         if (installed !== undefined) continue
         // 搜索同时认展示名与原始名：官网「archify integrations」，原始「archify#integrations/…」
-        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', plugin.description ?? '', plugin.owner ?? '']
+        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', categoryText(plugin.category, registry?.categories, english) ?? '', plugin.description ?? '', plugin.owner ?? '']
           .join(' ')
           .toLowerCase()
         // 名次在搜索之前就定下来：搜过的视图里仍是它真实的名次，而不是"第 1 个匹配"。
@@ -1766,7 +1779,7 @@ export function MarketSection(props: {
       for (const [index, plugin] of entries.entries()) {
         const installed = matchInstalled(plugin, installedByName, installedByRepo)
         const identity = typeof plugin.npm === 'string' && plugin.npm !== '' ? plugin.npm : plugin.name
-        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', plugin.description ?? '', plugin.owner ?? '']
+        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', categoryText(plugin.category, registry?.categories, english) ?? '', plugin.description ?? '', plugin.owner ?? '']
           .join(' ')
           .toLowerCase()
         if (query !== '' && !haystack.includes(query)) continue
@@ -2113,7 +2126,7 @@ export function MarketSection(props: {
                     <>
                       <div className={css.cardGrid} role="list">
                         {visibleDiscoverRows.map(row => (
-                          <PluginCard key={row.key} t={t} row={row} actions={actions} />
+                          <PluginCard key={row.key} t={t} row={row} actions={actions} categories={registry?.categories} english={english} />
                         ))}
                       </div>
                       {matchedDiscoverRows.length > visibleDiscoverRows.length && (
