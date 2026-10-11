@@ -1154,3 +1154,114 @@ describe('Discover — the category selector browses the site vocabulary', () =>
     expect(host.textContent).toContain('切到「全部」')
   })
 })
+
+describe('Discover — the featured category is a chip, and the controls share a line', () => {
+  /**
+   * Two layout requirements from the field:
+   *  1. the site's featured category (甄选, first in the published vocabulary)
+   *     must be visible WITHOUT opening a selector — the front page lists
+   *     categories as chips with 甄选 pinned first, so the panel promotes the
+   *     first vocabulary entry into the chip row right after 「全部」;
+   *  2. 「分类筛选」 and 「排序」 must sit on one line — a wrapping toolbar dropped
+   *     the category selector onto a line of its own at some widths.
+   */
+  const ROWS = [
+    { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12 },
+    { key: 'alpha/dsh-spend', name: 'dsh-spend', owner: 'alpha', category: 'cost', stars: 9 },
+  ]
+  const TABLE = [
+    { id: 'curated', label: '甄选', labelEn: 'Featured', count: 2 },
+    { id: 'cost', label: '费用与额度', labelEn: 'Cost', count: 1 },
+  ]
+
+  function installStub(): void {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, method: init?.method ?? 'GET' })
+      if (url.includes('/registry')) return json({ registry: { plugins: ROWS, count: ROWS.length, categories: TABLE } })
+      if (url.includes('/installed')) return json(INVENTORY)
+      if (url.includes('/updates')) return json([])
+      if (url.includes('/discovery-compatibility')) return json({ results: [] })
+      if (url.includes('/status')) {
+        return json({
+          boot: 'test-boot', version: '0.1.1', channel: 'stable', region: 'global', profile: 'web',
+          busy: false, progress: { active: false }, pnpm: { ok: true },
+          restart: { allowed: false, debugger: false, scheduled: false }, installed: [],
+        })
+      }
+      return json({ ok: true })
+    }) as typeof fetch
+  }
+
+  async function mountIn(language: 'zh' | 'en'): Promise<HTMLElement> {
+    installStub()
+    const dictionary = language === 'en' ? en : zh
+    const localeT = (key: string, params?: Record<string, string | number>): string => translate(dictionary, key, params)
+    const container = document.getElementById('host') as HTMLElement
+    root = createRoot(container)
+    root.render(createElement(MarketSection, {
+      t: localeT,
+      locale: {
+        register: () => undefined,
+        bind: () => localeT,
+        subscribe: () => () => undefined,
+        getSnapshot: () => ({ active: language }),
+      },
+      theme: { getTheme: () => ({ id: 'dark' }), setTheme: () => undefined },
+      themeStore: { subscribe: () => () => undefined, getSnapshot: () => ({ id: 'dark' }), getServerSnapshot: () => ({ id: 'dark' }) },
+    }))
+    await flush()
+    return container
+  }
+
+  /** The chip row, then the chip whose label matches. */
+  function chip(host: HTMLElement, label: string): HTMLButtonElement | undefined {
+    return [...host.querySelectorAll('button[aria-pressed]')]
+      .find(button => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined
+  }
+
+  it('lists 甄选 second, right after 全部', async () => {
+    const host = await mountIn('zh')
+    const labels = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
+    expect(labels.slice(0, 3)).toEqual(['全部', '甄选', '已安装'])
+  })
+
+  it('localizes the featured chip and toggles the filter from it', async () => {
+    const host = await mountIn('en')
+    const featured = chip(host, 'Featured')
+    expect(featured).toBeDefined()
+    featured?.click()
+    await flush()
+    expect(cardTitles(host)).toEqual(['dsh-atlas'])
+    expect(chip(host, 'Featured')?.getAttribute('aria-pressed')).toBe('true')
+    // Clicking it again clears the filter (the chip is a toggle, not a one-way).
+    chip(host, 'Featured')?.click()
+    await flush()
+    expect(cardTitles(host).length).toBe(2)
+  })
+
+  it('keeps the chip and the selector in sync', async () => {
+    const host = await mountIn('zh')
+    const select = host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
+    selectOption(select, 'curated')
+    await flush()
+    expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('true')
+    // 「全部」 clears the category too — it is the "no filter" entry.
+    chip(host, '全部')?.click()
+    await flush()
+    expect((host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement).value).toBe('')
+  })
+
+  it('puts 分类筛选 and 排序 on one non-wrapping line', async () => {
+    const host = await mountIn('zh')
+    const category = host.querySelector('select[aria-label="分类筛选"]')
+    const sort = host.querySelector('select[aria-label="排序"]') ?? host.querySelector('select[aria-label="Sort"]')
+    expect(category).not.toBeNull()
+    expect(sort).not.toBeNull()
+    // Same container, and that container is the one that must not wrap.
+    const line = category?.closest('[class*="toolbarControlsLine"]')
+    expect(line).not.toBeNull()
+    expect(line?.contains(sort)).toBe(true)
+    expect(line?.className).toContain('toolbarControlsLine')
+  })
+})

@@ -555,6 +555,11 @@ async function captureView(port, { url, target, width, height, scale }) {
           cards: document.querySelectorAll('[class*="cardTitle"]').length,
           titles: [...document.querySelectorAll('[class*="cardTitle"]')].slice(0, 4).map(node => node.textContent),
           categories: [...document.querySelectorAll('select[aria-label] option')].map(node => node.textContent),
+          // The layout requirement in numbers: 分类筛选 and 排序 must share a line,
+          // which is measurable rather than a matter of opinion.
+          categorySelectTop: document.querySelector('select[aria-label="分类筛选"]')?.getBoundingClientRect().top ?? null,
+          sortSelectTop: (document.querySelector('select[aria-label="排序"]') ?? document.querySelector('select[aria-label="Sort"]'))?.getBoundingClientRect().top ?? null,
+          chips: [...document.querySelectorAll('[role="group"] button')].map(node => node.textContent),
           text: document.getElementById('root')?.innerText?.replace(/\\s+/g, ' ').slice(0, 300) ?? '',
           console: (window.__SHOT_CONSOLE__ ?? []).slice(0, 2),
           dialogs: document.querySelectorAll('[role="dialog"]').length,

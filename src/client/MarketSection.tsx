@@ -587,24 +587,71 @@ function Toolbar(props: {
   children?: ReactNode
 }) {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
+  /*
+   * The site's own front page lists every category as a chip with 「甄选」 pinned
+   * first, so the panel promotes the FIRST published category to a chip right
+   * after 「全部」: the featured category is then visible without opening a
+   * selector, and the site can move the promotion by reordering its vocabulary.
+   * The selector still reaches the whole vocabulary.
+   */
+  const featured = categories?.[0]
+  const chip = (active: boolean) => (active ? `${css.tab} ${css.tabActive}` : css.tab)
   return (
     <div className={css.toolbar}>
-      <Input
-        className={css.search}
-        icon={<IconSearch size={14} />}
-        value={query}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        onChange={event => onQuery(event.target.value)}
-      />
+      <div className={css.toolbarLine}>
+        <Input
+          className={css.search}
+          icon={<IconSearch size={14} />}
+          value={query}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          onChange={event => onQuery(event.target.value)}
+        />
+        {props.children}
+        <span className={css.spacer} />
+        <Button
+          variant="outline"
+          size="sm"
+          icon={<IconRefresh size={13} />}
+          onClick={onReload}
+          disabled={busy}
+          title={busy ? t('busyWait') : t('reload')}
+        >
+          {t('reload')}
+        </Button>
+      </div>
       {filter !== undefined && onFilter !== undefined && (
-        <div className={css.row} role="group" aria-label={t('filterLabel')}>
-          {FILTERS.map(entry => (
+        <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('filterLabel')}>
+          {FILTERS.slice(0, 1).map(entry => (
+            <button
+              key={entry.id}
+              type="button"
+              aria-pressed={filter === entry.id && (category === undefined || category === '')}
+              className={chip(filter === entry.id && (category === undefined || category === ''))}
+              onClick={() => {
+                onCategory?.('')
+                onFilter(entry.id)
+              }}
+            >
+              {t(entry.label)}
+            </button>
+          ))}
+          {featured !== undefined && onCategory !== undefined && category !== undefined && (
+            <button
+              type="button"
+              aria-pressed={category === featured.id}
+              className={chip(category === featured.id)}
+              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
+            >
+              {categoryEntryLabel(featured, props.english === true)}
+            </button>
+          )}
+          {FILTERS.slice(1).map(entry => (
             <button
               key={entry.id}
               type="button"
               aria-pressed={filter === entry.id}
-              className={filter === entry.id ? `${css.tab} ${css.tabActive}` : css.tab}
+              className={chip(filter === entry.id)}
               onClick={() => onFilter(entry.id)}
             >
               {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
@@ -612,23 +659,7 @@ function Toolbar(props: {
           ))}
         </div>
       )}
-      {sort !== undefined && onSort !== undefined && (
-        <label className={css.row}>
-          <span className={css.muted}>{t('sortLabel')}</span>
-          <select
-            className={css.select}
-            value={sort}
-            aria-label={t('sortLabel')}
-            onChange={event => onSort(event.target.value as SortKey)}
-          >
-            {SORTS.map(entry => (
-              <option key={entry.id} value={entry.id}>
-                {`${t(entry.field)} · ${t(entry.dir)}`}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <div className={css.toolbarControlsLine}>
       {/*
         * The category selector is driven by the catalog's own vocabulary, in the
         * site's order (curated first): the panel never invents a category list, so
@@ -656,18 +687,24 @@ function Toolbar(props: {
           </select>
         </label>
       )}
-      {props.children}
-      <span className={css.spacer} />
-      <Button
-        variant="outline"
-        size="sm"
-        icon={<IconRefresh size={13} />}
-        onClick={onReload}
-        disabled={busy}
-        title={busy ? t('busyWait') : t('reload')}
-      >
-        {t('reload')}
-      </Button>
+      {sort !== undefined && onSort !== undefined && (
+        <label className={css.row}>
+          <span className={css.muted}>{t('sortLabel')}</span>
+          <select
+            className={css.select}
+            value={sort}
+            aria-label={t('sortLabel')}
+            onChange={event => onSort(event.target.value as SortKey)}
+          >
+            {SORTS.map(entry => (
+              <option key={entry.id} value={entry.id}>
+                {`${t(entry.field)} · ${t(entry.dir)}`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      </div>
     </div>
   )
 }

@@ -34,7 +34,15 @@
 .tab:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:-2px}
 .tabActive,.tabOn{color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));border-bottom-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));font-weight:600}
 
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0}
+/* Three deliberate lines instead of one wrapping row: search, the chips, then the
+ * 分类筛选 + 排序 controls. A wrapping flex row dropped the controls onto a line of
+ * their own at some widths, which is what "keep them on the same line" rules out. */
+.toolbar{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px 0}
+.toolbarLine{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
+/* Chips may outgrow the dialog once the site adds categories; scroll rather than
+ * wrap so the row height stays predictable. */
+.chipLine{overflow-x:auto;padding-bottom:2px}
+.toolbarControlsLine{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;white-space:nowrap}
 .toolbarRow{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
 .toolbarSpacer{margin-left:auto}
 .search{flex:1;min-width:160px}
