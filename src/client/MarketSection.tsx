@@ -595,6 +595,12 @@ function Toolbar(props: {
    * The selector still reaches the whole vocabulary.
    */
   const featured = categories?.[0]
+  const selectedCategoryLabel = category === undefined || category === ''
+    ? undefined
+    : (() => {
+      const entry = categories?.find(candidate => candidate.id === category)
+      return entry === undefined ? category : categoryEntryLabel(entry, props.english === true)
+    })()
   const chip = (active: boolean) => (active ? `${css.tab} ${css.tabActive}` : css.tab)
   return (
     <div className={css.toolbar}>
@@ -666,12 +672,15 @@ function Toolbar(props: {
         * a category the site adds appears here without a plugin release.
         */}
       {category !== undefined && onCategory !== undefined && categories !== undefined && categories.length > 0 && (
-        <label className={css.row}>
+        <label className={`${css.row} ${css.controlsGrow}`}>
           <span className={css.muted}>{t('categoryFilterLabel')}</span>
           <select
-            className={css.select}
+            className={`${css.select} ${css.categorySelect}`}
             value={category}
             aria-label={t('categoryFilterLabel')}
+            /* The closed control may ellipsize a long label; the tooltip keeps the
+             * full text reachable without widening the row. */
+            title={selectedCategoryLabel ?? t('allCategories')}
             onChange={event => onCategory(event.target.value)}
           >
             <option value=''>{t('allCategories')}</option>
@@ -688,7 +697,7 @@ function Toolbar(props: {
         </label>
       )}
       {sort !== undefined && onSort !== undefined && (
-        <label className={css.row}>
+        <label className={`${css.row} ${css.controlsFixed}`}>
           <span className={css.muted}>{t('sortLabel')}</span>
           <select
             className={css.select}

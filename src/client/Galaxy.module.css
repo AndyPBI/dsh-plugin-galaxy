@@ -42,7 +42,25 @@
 /* Chips may outgrow the dialog once the site adds categories; scroll rather than
  * wrap so the row height stays predictable. */
 .chipLine{overflow-x:auto;padding-bottom:2px}
-.toolbarControlsLine{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;white-space:nowrap}
+.toolbarControlsLine{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;white-space:nowrap;min-width:0}
+/* The category control carries the site's whole vocabulary, including labels like
+ * 服务与交易（客服 / 订阅 / 开票 / 支付）: at its intrinsic width (a flex item's
+ * default `min-width:auto`) it pushed 排序 out of the row — first into an overlap,
+ * then, once capped, into an overflow at the host dialog's ~420px content column.
+ *
+ * `container-type:inline-size` makes the row's own width the authority: its
+ * children can no longer widen it, so the two controls can only fit or shrink —
+ * never overlap or spill. The query below then drops the text labels once the row
+ * is too narrow to carry them; both selects stay self-describing (「全部分类」,
+ * 「名称 · 升序」) and keep their aria-labels. */
+.toolbarControlsLine{container-type:inline-size}
+.toolbarControlsLine > label{min-width:0}
+.controlsGrow{flex:0 1 auto;min-width:0}
+.controlsFixed{flex:0 0 auto}
+.categorySelect{flex:0 1 auto;min-width:84px;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+@container (max-width:430px){
+  .controlsGrow > span,.controlsFixed > span{display:none}
+}
 .toolbarRow{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
 .toolbarSpacer{margin-left:auto}
 .search{flex:1;min-width:160px}

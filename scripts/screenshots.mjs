@@ -41,6 +41,22 @@ function flag(name, fallback) {
 const harness = resolve(flag('harness', process.env.DSH_HARNESS ?? resolve(workspace, '..', 'deepseek-harness')))
 const host = flag('url', 'http://127.0.0.1:3080').replace(/\/$/u, '')
 const keep = process.argv.includes('--keep')
+/** Viewport width. The host's settings column is ~420px, so a 1044px-only check
+ * would never exercise the width where the controls actually have to fit. */
+const width = Number(flag('width', '1044'))
+/** Capture one view only, for layout iteration. */
+const only = flag('only', '')
+
+/*
+ * Layout guard reporting. The images cannot be read back here, so the same run
+ * also measures the two controls and reports PASS/FAIL — a regression that only
+ * shows up visually still fails the command.
+ */
+let layoutFailures = 0
+function check(label, condition, detail) {
+  console.log(`    ${condition ? 'PASS' : 'FAIL'}  ${label}${detail === undefined ? '' : ` — ${detail}`}`)
+  if (!condition) layoutFailures += 1
+}
 
 const CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -327,6 +343,13 @@ window.__DSH_BOOT__ = () => {
  * 3. page — inlined harness, then the real client bundle
  * ------------------------------------------------------------------ */
 
+/*
+ * THIS FILE BUILDS HTML/JS INSIDE TEMPLATE LITERALS. A backtick anywhere in the
+ * PAGE or ENTRY text ends the literal early and the script dies with a syntax
+ * error (twice now: a CSS comment quoting a flag, and a JS comment quoting an
+ * export name). Use quotes, never backticks, inside those blocks.
+ */
+
 /**
  * The harness is a separate file on purpose: inlining it breaks the page — the
  * minified React bundle contains `</script>` and the HTML parser ends the script
@@ -339,7 +362,9 @@ const PAGE = `<!doctype html>
 <link rel="stylesheet" href="./harness.css">
 <style>
 html,body{margin:0;padding:0;background:var(--dsw-alias-bg-layer-1,#fff)}
-#root{width:1000px;padding:20px 22px 28px;box-sizing:border-box;font-family:-apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+/* The panel fills the viewport so the --width flag really is the dialog width it
+   is laid out in (a fixed 1000px made every width measure the same layout). */
+#root{width:100%;max-width:1000px;padding:20px 22px 28px;box-sizing:border-box;font-family:-apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif}
 </style></head>
 <body>
 <div id="root"></div>
@@ -557,9 +582,20 @@ async function captureView(port, { url, target, width, height, scale }) {
           categories: [...document.querySelectorAll('select[aria-label] option')].map(node => node.textContent),
           // The layout requirement in numbers: 分类筛选 and 排序 must share a line,
           // which is measurable rather than a matter of opinion.
-          categorySelectTop: document.querySelector('select[aria-label="分类筛选"]')?.getBoundingClientRect().top ?? null,
-          sortSelectTop: (document.querySelector('select[aria-label="排序"]') ?? document.querySelector('select[aria-label="Sort"]'))?.getBoundingClientRect().top ?? null,
+          categorySelectRect: (() => {
+            const node = document.querySelector('select[aria-label="分类筛选"]')
+            if (node === null) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, left: r.left, right: r.right, width: r.width }
+          })(),
+          sortSelectRect: (() => {
+            const node = document.querySelector('select[aria-label="排序"]') ?? document.querySelector('select[aria-label="Sort"]')
+            if (node === null) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, left: r.left, right: r.right, width: r.width }
+          })(),
           chips: [...document.querySelectorAll('[role="group"] button')].map(node => node.textContent),
+          viewportWidth: window.innerWidth,
           text: document.getElementById('root')?.innerText?.replace(/\\s+/g, ' ').slice(0, 300) ?? '',
           console: (window.__SHOT_CONSOLE__ ?? []).slice(0, 2),
           dialogs: document.querySelectorAll('[role="dialog"]').length,
@@ -586,15 +622,79 @@ async function captureView(port, { url, target, width, height, scale }) {
   }
 }
 
+/**
+ * The two controls' geometry, measured in a fresh tab at a given width. No image
+ * is written: this exists because the README images are captured wide (1044px)
+ * while the host's settings column is about 420px, and that is the width where
+ * the category control used to push 排序 out of the row.
+ */
+async function measureControls(port, url, width) {
+  const created = await (await fetch(
+    `http://127.0.0.1:${String(port)}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
+  )).json()
+  const socket = new WebSocket(created.webSocketDebuggerUrl)
+  try {
+    await new Promise(resolve => socket.addEventListener('open', resolve, { once: true }))
+    let nextId = 0
+    const pending = new Map()
+    socket.addEventListener('message', event => {
+      const message = JSON.parse(event.data)
+      const settle = pending.get(message.id)
+      if (settle === undefined) return
+      pending.delete(message.id)
+      if (message.error !== undefined) settle.reject(new Error(message.error.message))
+      else settle.resolve(message.result)
+    })
+    const send = (method, params = {}) => new Promise((resolve, reject) => {
+      const id = ++nextId
+      pending.set(id, { resolve, reject })
+      socket.send(JSON.stringify({ id, method, params }))
+    })
+    await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false })
+    const until = Date.now() + 20_000
+    while (Date.now() < until) {
+      const evaluated = await send('Runtime.evaluate', {
+        expression: `JSON.stringify({
+          ready: document.body?.dataset?.ready ?? '',
+          categorySelectRect: (() => {
+            const node = document.querySelector('select[aria-label="分类筛选"]')
+            if (node === null) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, left: r.left, right: r.right, width: r.width }
+          })(),
+          sortSelectRect: (() => {
+            const node = document.querySelector('select[aria-label="排序"]') ?? document.querySelector('select[aria-label="Sort"]')
+            if (node === null) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, left: r.left, right: r.right, width: r.width }
+          })(),
+          viewportWidth: window.innerWidth,
+        })`,
+        returnByValue: true,
+      })
+      const raw = evaluated?.result?.value
+      if (typeof raw === 'string') {
+        const state = JSON.parse(raw)
+        if (state.ready === '1') return state
+      }
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    return {}
+  } finally {
+    socket.close()
+    await fetch(`http://127.0.0.1:${String(port)}/json/close/${created.id}`).catch(() => {})
+  }
+}
+
 const report = []
 const browser = await startBrowser()
 try {
-  for (const view of VIEWS) {
+  for (const view of VIEWS.filter(candidate => only === '' || candidate.id === only)) {
     const target = join(outDir, view.file)
     const state = await captureView(browser.port, {
       url: `file://${join(shotDir, 'page.html')}?view=${view.id}`,
       target,
-      width: 1044,
+      width,
       height: 900,
       scale: 2,
     })
@@ -603,11 +703,48 @@ try {
     console.log(`    ${view.file}: ${ok ? 'written' : 'MISSING'} · cards=${String(state.cards ?? 0)}`
       + `${state.boot === '' ? '' : ` · BOOT ERROR: ${state.boot}`}${state.page === '' ? '' : ` · PAGE ERROR: ${state.page}`}`)
     if (!ok) process.exitCode = 1
+
+    /*
+     * Layout guard, measured rather than eyeballed: 「分类筛选」 and 「排序」 must
+     * share a line AND not overlap. The category control carries the site's whole
+     * vocabulary (labels like 服务与交易（客服 / 订阅 / 开票 / 支付）), and before it
+     * was width-capped it pushed the sort control out of the row.
+     */
+    const category = state.categorySelectRect
+    const sort = state.sortSelectRect
+    if (category != null && sort != null) {
+      const sameLine = Math.abs(category.top - sort.top) < 4
+      const noOverlap = category.right <= sort.left + 1
+      const insideRow = category.left >= 0 && sort.right <= (state.viewportWidth ?? Number.POSITIVE_INFINITY) + 1
+      check(`    ${view.file}: 分类筛选与排序同行`, sameLine, `top ${String(Math.round(category.top))} vs ${String(Math.round(sort.top))}`)
+      check(`    ${view.file}: 分类筛选不挤压/重叠排序`, noOverlap && insideRow,
+        `分类框 right=${String(Math.round(category.right))} 排序 left=${String(Math.round(sort.left))} (宽度 ${String(Math.round(category.width))})`)
+    }
+  }
+  // The dialog-width pass: the images above are wide, this is where the panel
+  // actually lives. Reported with the same PASS/FAIL wording as the images.
+  for (const narrow of [420, 380]) {
+    const state = await measureControls(browser.port, `file://${join(shotDir, 'page.html')}?view=all`, narrow)
+    const category = state.categorySelectRect
+    const sort = state.sortSelectRect
+    if (category == null || sort == null) {
+      check(`    ${String(narrow)}px: the two controls are present`, false, 'not rendered')
+      continue
+    }
+    check(`    ${String(narrow)}px: 分类筛选与排序同行`, Math.abs(category.top - sort.top) < 4,
+      `top ${String(Math.round(category.top))} vs ${String(Math.round(sort.top))}`)
+    check(`    ${String(narrow)}px: 分类筛选不挤压/重叠排序 (含不出框)`,
+      category.right <= sort.left + 1 && sort.right <= (state.viewportWidth ?? 0) + 1,
+      `分类框 right=${String(Math.round(category.right))} 排序 left=${String(Math.round(sort.left))} 排序 right=${String(Math.round(sort.right))} 视口=${String(state.viewportWidth)}`)
   }
 } finally {
   browser.child.kill('SIGKILL')
 }
 writeFileSync(join(shotDir, 'report.json'), JSON.stringify(report, null, 2))
+if (layoutFailures > 0) {
+  console.error(`\nLAYOUT: FAIL (${String(layoutFailures)}) — see the per-view measurements above`)
+  process.exitCode = 1
+}
 console.log(`    titles sample: ${JSON.stringify(report[0]?.titles ?? [])}`)
 
 // The harness page can report what it did; a missing filter button would

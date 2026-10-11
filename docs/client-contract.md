@@ -346,7 +346,24 @@ monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepse
 | 3 | **分类筛选 + 排序** | `.toolbarControlsLine`，`flex-wrap:nowrap` + `white-space:nowrap`，两者**必须同行** |
 
 > 原因：`.toolbar` 原先是 `flex-wrap:wrap` 的横排，某些宽度下「分类筛选」会被挤到单独一行（实测 `分类筛选 top=88 / 排序 top=46`）。
-> 布局探针（`npm run screenshots` 的 CDP 探测）会把两个 select 的 `getBoundingClientRect().top` 一起报出来，改坏了会直接可见。
+> 布局探针（`npm run screenshots` 的 CDP 探测）会把两个 select 的 `getBoundingClientRect()` 一起报出来，改坏了会直接可见。
+
+**分类框的宽度约束（避免挤占/重叠排序）**——两次修复的完整因果：
+
+| 症状 | 原因 | 处理 |
+|---|---|---|
+| 分类框与排序**重叠** | 分类框最长的选项（`服务与交易（客服 / 订阅 / 开票 / 支付） (18)`）撑起 `min-width:auto`，flex 不肯收缩 | 分类框 `min-width:0` + `max-width:320px` + `overflow:hidden;text-overflow:ellipsis`（完整标签走 `title`） |
+| 窄宽度下整行**溢出**对话框 | 行宽仍由内容决定 | `.toolbarControlsLine{container-type:inline-size}`：行宽改由容器决定，子项只能压缩不能撑宽；`@container (max-width:430px)` 时隐藏两个文字标签（两个 select 自身可读，且保留 `aria-label`） |
+| 排序被压缩 | 两个控件都可收缩 | 分类框 `flex:0 1 auto`（可收缩），排序 `flex:0 0 auto`（不参与压缩） |
+
+实测（`npm run screenshots` 自动跑，宽 1044 逐视图 + **真实对话框宽 420 / 380**）：
+
+```
+420px: 分类框 right=235  排序 left=249  排序 right=398 ≤ 视口 420   PASS
+380px: 分类框 right=195  排序 left=209  排序 right=358 ≤ 视口 380   PASS
+```
+
+> 注意：截图探针页的 `#root` 必须 `width:100%`（曾写死 1000px，导致三档宽度测出同一组数字，等于没测）。
 
 ### 6.10 排序菜单里没有"推荐"
 
