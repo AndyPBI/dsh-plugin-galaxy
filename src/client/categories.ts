@@ -18,14 +18,23 @@ export function isEnglishLanguage(language: string | undefined): boolean {
   return typeof language === 'string' && /^en\b/iu.test(language.trim())
 }
 
+/**
+ * The label of one vocabulary entry in the active language.
+ *
+ * The fallback chain is label → other language → slug, so a half-translated
+ * vocabulary (or a hand-edited catalog) still prints something a user can read.
+ */
+export function categoryEntryLabel(entry: RegistryCategory, english: boolean): string {
+  const preferred = english ? entry.labelEn : entry.label
+  const fallback = english ? entry.label : entry.labelEn
+  const chosen = preferred !== undefined && preferred.trim() !== '' ? preferred : fallback
+  return chosen !== undefined && chosen.trim() !== '' ? chosen : entry.id
+}
+
 /** One slug resolved against the published table. */
 function oneLabel(slug: string, categories: readonly RegistryCategory[] | undefined, english: boolean): string {
   const entry = categories?.find(candidate => candidate.id.toLowerCase() === slug.toLowerCase())
-  if (entry === undefined) return slug
-  const preferred = english ? entry.labelEn : entry.label
-  const fallback = english ? entry.label : entry.labelEn
-  const chosen = preferred !== undefined && preferred !== '' ? preferred : fallback
-  return chosen !== undefined && chosen !== '' ? chosen : slug
+  return entry === undefined ? slug : categoryEntryLabel(entry, english)
 }
 
 /**

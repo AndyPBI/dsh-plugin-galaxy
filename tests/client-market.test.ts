@@ -1033,3 +1033,124 @@ describe('Discover — category labels follow the catalog', () => {
     expect(cardTitles(host)).toEqual(['dsh-atlas'])
   })
 })
+
+describe('Discover — the category selector browses the site vocabulary', () => {
+  /**
+   * The badge alone was not enough: 「甄选」 had to be *browsable*, and the option
+   * list must come from the catalog (order and labels included) so a category the
+   * site adds appears without a plugin release.
+   */
+  const ROWS = [
+    { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12, description: '地图式知识整理' },
+    { key: 'alpha/dsh-spend', name: 'dsh-spend', owner: 'alpha', category: 'cost', stars: 9, description: '花销看板' },
+    { key: 'beta/dsh-plain', name: 'dsh-plain', owner: 'beta', category: 'made-up', stars: 1 },
+  ]
+  const TABLE = [
+    { id: 'curated', label: '甄选', labelEn: 'Featured', count: 3 },
+    { id: 'cost', label: '费用与额度', labelEn: 'Cost', count: 1 },
+  ]
+
+  function installStub(withRanking = false): void {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, method: init?.method ?? 'GET' })
+      if (url.includes('/registry')) {
+        return json({
+          registry: {
+            plugins: ROWS,
+            count: ROWS.length,
+            categories: TABLE,
+            ...(withRanking
+              ? { ranking: { version: 'opc-ranking/1', window: 20, top: ['alpha/dsh-spend'], pins: [] } }
+              : {}),
+          },
+        })
+      }
+      if (url.includes('/installed')) return json(INVENTORY)
+      if (url.includes('/updates')) return json([])
+      if (url.includes('/discovery-compatibility')) return json({ results: [] })
+      if (url.includes('/status')) {
+        return json({
+          boot: 'test-boot', version: '0.1.1', channel: 'stable', region: 'global', profile: 'web',
+          busy: false, progress: { active: false }, pnpm: { ok: true },
+          restart: { allowed: false, debugger: false, scheduled: false }, installed: [],
+        })
+      }
+      return json({ ok: true })
+    }) as typeof fetch
+  }
+
+  async function mountIn(language: 'zh' | 'en', withRanking = false): Promise<HTMLElement> {
+    installStub(withRanking)
+    const dictionary = language === 'en' ? en : zh
+    const localeT = (key: string, params?: Record<string, string | number>): string => translate(dictionary, key, params)
+    const container = document.getElementById('host') as HTMLElement
+    root = createRoot(container)
+    root.render(createElement(MarketSection, {
+      t: localeT,
+      locale: {
+        register: () => undefined,
+        bind: () => localeT,
+        subscribe: () => () => undefined,
+        getSnapshot: () => ({ active: language }),
+      },
+      theme: { getTheme: () => ({ id: 'dark' }), setTheme: () => undefined },
+      themeStore: { subscribe: () => () => undefined, getSnapshot: () => ({ id: 'dark' }), getServerSnapshot: () => ({ id: 'dark' }) },
+    }))
+    await flush()
+    return container
+  }
+
+  function categorySelect(host: HTMLElement, label: string): HTMLSelectElement {
+    return host.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement
+  }
+
+  it('offers every published category, in the site order, with live counts', async () => {
+    const host = await mountIn('zh')
+    const select = categorySelect(host, '分类筛选')
+    expect(select).toBeDefined()
+    expect([...select.options].map(option => option.textContent)).toEqual(['全部分类', '甄选 (1)', '费用与额度 (1)'])
+    expect(select.value).toBe('')
+  })
+
+  it('localizes the options with the host locale', async () => {
+    const host = await mountIn('en')
+    const select = categorySelect(host, 'Category filter')
+    expect([...select.options].map(option => option.textContent)).toEqual(['All categories', 'Featured (1)', 'Cost (1)'])
+  })
+
+  it('shows only that category\'s plugins once selected', async () => {
+    const host = await mountIn('zh')
+    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    await flush()
+    expect(cardTitles(host)).toEqual(['dsh-atlas'])
+    // The row whose slug is not in the vocabulary is still reachable under 全部.
+    selectOption(categorySelect(host, '分类筛选'), '')
+    await flush()
+    expect(cardTitles(host).length).toBe(3)
+  })
+
+  it('composes with the search box', async () => {
+    const host = await mountIn('zh')
+    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    await flush()
+    const input = [...host.querySelectorAll('input')]
+      .find(element => (element.getAttribute('aria-label') ?? '').startsWith('搜索')) as HTMLInputElement
+    typeInto(input, '花销')
+    await flush()
+    expect(cardTitles(host)).toEqual([])
+  })
+
+  it('explains an empty category instead of looking broken', async () => {
+    // 「推荐」 is the fixed ranking (one scored row); the curated row is not on it,
+    // so the combination is honestly empty and the hint says how to see it.
+    const host = await mountIn('zh', true)
+    clickChip(host, '推荐')
+    await flush()
+    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    await flush()
+    expect(cardTitles(host)).toEqual([])
+    expect(host.textContent).toContain('该分类下没有可显示的条目')
+    expect(host.textContent).toContain('切到「全部」')
+  })
+})

@@ -40,7 +40,7 @@ import {
   updatePlugin,
   useSkin,
 } from './market-data.ts'
-import { categoryText, isEnglishLanguage } from './categories.ts'
+import { categoryEntryLabel, categoryText, isEnglishLanguage } from './categories.ts'
 import type { RegistryCategory } from './market-data.ts'
 // Host-service and group vocabulary shapes live with the API client; importing
 // them (rather than re-declaring) keeps this file wired to the same types the
@@ -398,6 +398,21 @@ function catalogKeyOf(plugin: RegistryPlugin): string | undefined {
 }
 
 /**
+ * Whether a row belongs to the selected category.
+ *
+ * `''` means "no category filter". Rows may carry several slugs (older rows joined
+ * them with `, `), so the comparison is per slug and case-insensitive: the site's
+ * vocabulary is lowercase, but a hand-edited catalog need not be.
+ */
+function inCategory(plugin: RegistryPlugin, category: string): boolean {
+  if (category === '') return true
+  const wanted = category.toLowerCase()
+  return (plugin.category ?? '')
+    .split(',')
+    .some(part => part.trim().toLowerCase() === wanted)
+}
+
+/**
  * The label a row is DISPLAYED under.
  *
  * The catalog ships `displayName` — the website's own label: monorepo entries are
@@ -560,9 +575,18 @@ function Toolbar(props: {
   recommended?: boolean
   sort?: SortKey
   onSort?: (value: SortKey) => void
+  /** Selected category slug; `''` = all categories. */
+  category?: string
+  onCategory?: (value: string) => void
+  /** The catalog's vocabulary, in the order the site publishes it. */
+  categories?: readonly RegistryCategory[]
+  /** Rows per category slug, counted over the whole catalog. */
+  categoryCounts?: ReadonlyMap<string, number>
+  /** Whether the English labels apply to the category options. */
+  english?: boolean
   children?: ReactNode
 }) {
-  const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort } = props
+  const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
   return (
     <div className={css.toolbar}>
       <Input
@@ -602,6 +626,33 @@ function Toolbar(props: {
                 {`${t(entry.field)} · ${t(entry.dir)}`}
               </option>
             ))}
+          </select>
+        </label>
+      )}
+      {/*
+        * The category selector is driven by the catalog's own vocabulary, in the
+        * site's order (curated first): the panel never invents a category list, so
+        * a category the site adds appears here without a plugin release.
+        */}
+      {category !== undefined && onCategory !== undefined && categories !== undefined && categories.length > 0 && (
+        <label className={css.row}>
+          <span className={css.muted}>{t('categoryFilterLabel')}</span>
+          <select
+            className={css.select}
+            value={category}
+            aria-label={t('categoryFilterLabel')}
+            onChange={event => onCategory(event.target.value)}
+          >
+            <option value=''>{t('allCategories')}</option>
+            {categories.map(entry => {
+              const label = categoryEntryLabel(entry, props.english === true)
+              const count = categoryCounts?.get(entry.id)
+              return (
+                <option key={entry.id} value={entry.id}>
+                  {count === undefined ? label : `${label} (${String(count)})`}
+                </option>
+              )
+            })}
           </select>
         </label>
       )}
@@ -1284,6 +1335,9 @@ export function MarketSection(props: {
     () => (tabFromPreferred(props.preferredSubsectionId) === 'installed' ? 'installed' : 'all'),
   )
   const [sort, setSort] = useState<SortKey>('name-asc')
+  // '' = no category filter. Kept as a slug (not a label) because the site owns
+  // the vocabulary and may relabel a category without changing its rows.
+  const [category, setCategory] = useState('')
   const [installedView, setInstalledView] = useState<'list' | 'groups'>('list')
 
   const [registry, setRegistry] = useState<Registry | null>(null)
@@ -1771,6 +1825,7 @@ export function MarketSection(props: {
           .toLowerCase()
         // 名次在搜索之前就定下来：搜过的视图里仍是它真实的名次，而不是"第 1 个匹配"。
         rank += 1
+        if (!inCategory(plugin, category)) continue
         if (query !== '' && !haystack.includes(query)) continue
         push(plugin, rank, true, installed, rank)
         shown += 1
@@ -1782,6 +1837,7 @@ export function MarketSection(props: {
         const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', categoryText(plugin.category, registry?.categories, english) ?? '', plugin.description ?? '', plugin.owner ?? '']
           .join(' ')
           .toLowerCase()
+        if (!inCategory(plugin, category)) continue
         if (query !== '' && !haystack.includes(query)) continue
         if (filter === 'not-installed' && installed !== undefined) continue
         if (filter === 'update-available' && updates[installed?.name ?? '']?.updateAvailable !== true) continue
@@ -1810,7 +1866,7 @@ export function MarketSection(props: {
     return rows
   }, [
     registry, inventory, installedByName, installedByRepo, catalogByPackage, catalogByRepo,
-    updates, compatibility, discoverQuery, filter, sort,
+    updates, compatibility, discoverQuery, filter, sort, category,
   ])
 
   /**
@@ -1819,6 +1875,24 @@ export function MarketSection(props: {
    * The compatibility verdict is applied on top of this set once it arrives, so
    * the request below can ask about exactly these rows.
    */
+  /*
+   * Rows per category slug, counted over the whole catalog — the number the
+   * selector shows next to a label. Counted from the rows the panel holds rather
+   * than the vocabulary's `count`: the two agree on a healthy catalog (gate
+   * 11.4), and when they disagree the number should describe what selecting the
+   * category will actually show.
+   */
+  const countsByCategory = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const plugin of registry?.plugins ?? []) {
+      for (const part of (plugin.category ?? '').split(',')) {
+        const slug = part.trim()
+        if (slug !== '') counts.set(slug, (counts.get(slug) ?? 0) + 1)
+      }
+    }
+    return counts
+  }, [registry])
+
   const matchedDiscoverRows = useMemo(
     () => (filter === 'incompatible'
       ? discoverRows.filter(row => row.compatibility?.status === 'incompatible')
@@ -2085,6 +2159,11 @@ export function MarketSection(props: {
             recommended={recommendationAvailable}
             sort={rankingView ? undefined : sort}
             onSort={setSort}
+            category={category}
+            onCategory={setCategory}
+            categories={registry?.categories}
+            categoryCounts={countsByCategory}
+            english={english}
           />
           {registryLoading && registry === null && (
             <div className={css.spinnerWrap} role="status">
@@ -2118,8 +2197,10 @@ export function MarketSection(props: {
               {matchedDiscoverRows.length === 0
                 ? (
                     <div className={css.empty}>
-                      <div className={css.emptyTitle}>{t('noMatch')}</div>
-                      <div className={css.emptyHint}>{t('emptyHint')}</div>
+                      <div className={css.emptyTitle}>{category === '' ? t('noMatch') : t('categoryEmpty')}</div>
+                      <div className={css.emptyHint}>
+                        {category !== '' && rankingView ? t('categoryEmptyRecommended') : t('emptyHint')}
+                      </div>
                     </div>
                   )
                 : (

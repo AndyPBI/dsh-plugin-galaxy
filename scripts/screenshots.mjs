@@ -490,7 +490,16 @@ function waitForDevtools(port, deadlineMs = 15_000) {
   })()
 }
 
-async function cdpCapture({ url, target, width, height, scale }) {
+/**
+ * One Chrome for every view, one tab per view.
+ *
+ * The first version spawned a browser per view with the same `--user-data-dir`,
+ * and the second spawn was refused the profile lock: the port came up but the
+ * tab never navigated, `Runtime.evaluate` answered `undefined`, and the script
+ * died on `JSON.parse`. A single browser with a fresh target per view has no such
+ * window — and it is faster.
+ */
+async function startBrowser() {
   const port = 9300 + Math.floor(Math.random() * 300)
   const child = spawn(chrome, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
@@ -498,13 +507,21 @@ async function cdpCapture({ url, target, width, height, scale }) {
     `--user-data-dir=${join(shotDir, 'chrome-profile')}`,
     `--remote-debugging-port=${String(port)}`, 'about:blank',
   ], { stdio: 'ignore' })
-
   try {
     await waitForDevtools(port)
-    const created = await (await fetch(
-      `http://127.0.0.1:${String(port)}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
-    )).json()
-    const socket = new WebSocket(created.webSocketDebuggerUrl)
+  } catch (error) {
+    child.kill('SIGKILL')
+    throw error
+  }
+  return { port, child }
+}
+
+async function captureView(port, { url, target, width, height, scale }) {
+  const created = await (await fetch(
+    `http://127.0.0.1:${String(port)}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
+  )).json()
+  const socket = new WebSocket(created.webSocketDebuggerUrl)
+  try {
     await new Promise((resolve, reject) => {
       socket.addEventListener('open', resolve, { once: true })
       socket.addEventListener('error', () => reject(new Error('devtools socket failed')), { once: true })
@@ -537,46 +554,53 @@ async function cdpCapture({ url, target, width, height, scale }) {
           root: document.getElementById('root')?.innerHTML.length ?? 0,
           cards: document.querySelectorAll('[class*="cardTitle"]').length,
           titles: [...document.querySelectorAll('[class*="cardTitle"]')].slice(0, 4).map(node => node.textContent),
-          debug: document.getElementById('shot-debug')?.textContent?.slice(0, 400) ?? '',
-          text: document.getElementById('root')?.innerText?.replace(/\\s+/g, ' ').slice(0, 260) ?? '',
+          categories: [...document.querySelectorAll('select[aria-label] option')].map(node => node.textContent),
+          text: document.getElementById('root')?.innerText?.replace(/\\s+/g, ' ').slice(0, 300) ?? '',
           console: (window.__SHOT_CONSOLE__ ?? []).slice(0, 2),
           dialogs: document.querySelectorAll('[role="dialog"]').length,
           height: document.documentElement.scrollHeight,
         })`,
         returnByValue: true,
       })
-      state = JSON.parse(evaluated.result.value)
-      if (state.ready === '1' || state.boot !== '') break
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // A target that is still navigating answers `undefined`; poll again instead
+      // of crashing on it (the previous version died here for view #2).
+      const raw = evaluated?.result?.value
+      if (typeof raw === 'string') {
+        state = JSON.parse(raw)
+        if (state.ready === '1' || state.boot !== '') break
+      }
+      await new Promise(resolve => setTimeout(resolve, 250))
     }
 
-    // Viewport only: one card-grid screen per image keeps them readable in a
-    // README instead of a 6000px strip of the whole catalog.
     const shot = await send('Page.captureScreenshot', { format: 'png' })
     writeFileSync(target, Buffer.from(shot.data, 'base64'))
-    socket.close()
     await fetch(`http://127.0.0.1:${String(port)}/json/close/${created.id}`).catch(() => {})
     return state
   } finally {
-    child.kill('SIGKILL')
+    socket.close()
   }
 }
 
 const report = []
-for (const view of VIEWS) {
-  const target = join(outDir, view.file)
-  const state = await cdpCapture({
-    url: `file://${join(shotDir, 'page.html')}?view=${view.id}`,
-    target,
-    width: 1044,
-    height: 900,
-    scale: 2,
-  })
-  report.push({ file: view.file, ...state })
-  const ok = existsSync(target) && statSync(target).size > 0
-  console.log(`    ${view.file}: ${ok ? 'written' : 'MISSING'} · cards=${String(state.cards ?? 0)} · root=${String(state.root ?? 0)}`
-    + `${state.boot === '' ? '' : ` · BOOT ERROR: ${state.boot}`}${state.page === '' ? '' : ` · PAGE ERROR: ${state.page}`}`)
-  if (!ok) process.exitCode = 1
+const browser = await startBrowser()
+try {
+  for (const view of VIEWS) {
+    const target = join(outDir, view.file)
+    const state = await captureView(browser.port, {
+      url: `file://${join(shotDir, 'page.html')}?view=${view.id}`,
+      target,
+      width: 1044,
+      height: 900,
+      scale: 2,
+    })
+    report.push({ file: view.file, ...state })
+    const ok = existsSync(target) && statSync(target).size > 0
+    console.log(`    ${view.file}: ${ok ? 'written' : 'MISSING'} · cards=${String(state.cards ?? 0)}`
+      + `${state.boot === '' ? '' : ` · BOOT ERROR: ${state.boot}`}${state.page === '' ? '' : ` · PAGE ERROR: ${state.page}`}`)
+    if (!ok) process.exitCode = 1
+  }
+} finally {
+  browser.child.kill('SIGKILL')
 }
 writeFileSync(join(shotDir, 'report.json'), JSON.stringify(report, null, 2))
 console.log(`    titles sample: ${JSON.stringify(report[0]?.titles ?? [])}`)
