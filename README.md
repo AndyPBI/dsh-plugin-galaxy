@@ -159,27 +159,7 @@ dsh plugin --profile web add \
 - **无 postinstall 脚本**；发布物只含 `lib/`、`src/`、`client/`、`cordis.patch.yml`、`LICENSE`
 - **失败不改宿主**：客户端 error boundary + 服务端逐路由捕获，本插件异常不影响宿主启动
 
-## 5. 配置
-
-| 配置 | 来源 | 默认 | 作用 |
-|---|---|---|---|
-| `profile` | cordis config / 宿主 | `web` | 被管理的 profile |
-| `allowRestart` | cordis config / 设置项 | 未配置（=禁用） | 一键重启开关 |
-| `maxSnapshots` | cordis config | `20` | 每 profile 保留快照数 |
-| `DSHG_REGISTRY_URL` | 环境变量 | 内置公共目录 | 自定义 catalog |
-| `DSHG_SITE_URL` | 环境变量 | 未设置（由 catalog origin 推导） | 插件官网基址；设置后每张卡片都深链到 `<基址>/#/ai/p/<owner%2Fname>` |
-| `DSHG_NPM_MIRROR` | 环境变量 | 未设置 | 覆盖 npm registry 基址 |
-| `DSHG_GITHUB_PROXY` | 环境变量 | 未设置 | 操作员托管的 GitHub 前缀代理（设置后 UI 锁定） |
-| `DSHG_UPDATES_ORIGIN` | 环境变量 | 内置 | release notes 来源 |
-| `DSHG_INSTALL_TIMEOUT_MS` | 环境变量 | 15 分钟 | 安装子进程超时 |
-| `DSHG_KILL_SETTLE_MS` | 环境变量 | 10 秒 | 杀进程后等待落定的兜底时限 |
-| `DSHG_DISCOVERY_TTL_MS` | 环境变量 | 6 小时 | 兼容性事实缓存 TTL |
-| `DSH_HOST_VERSION` | 环境变量 | 自动探测 | 显式覆盖宿主版本（宿主自身从不设置它） |
-| `catalogUrl` / `siteUrl` | `<profile>/.dsh-galaxy/state.json` | 未设置 | profile 级目录/官网地址（优先级低于同名环境变量） |
-| `DSH_HOME` | 环境变量 | `~/.dsh` | profile 根目录 |
-| `HTTP(S)_PROXY` / `NO_PROXY` | 环境变量 | 未设置 | 出站与 pnpm 子进程代理 |
-
-## 6. 常见问题
+## 5. 常见问题
 
 | 现象 | 原因 / 处理 |
 |---|---|
@@ -191,26 +171,7 @@ dsh plugin --profile web add \
 | 安装失败 | 面板会给出 pnpm 的原始输出；确认网络与 registry，必要时配置 `DSHG_NPM_MIRROR` / `HTTP(S)_PROXY` |
 | 面板显示"界面崩溃了" | 恢复面板可导出脱敏日志；把日志附在 issue 里即可复现 |
 
-## 7. 开发与发版门禁
-
-```bash
-npm run typecheck        # 服务端 + 客户端两套 tsconfig
-npm run build            # tsc → lib/，tsdown → client/client.js
-npm test                 # vitest
-npm run smoke:client     # 按 __ModuleLoader__ 契约求值客户端 bundle 并渲染每个界面
-npm run verify:dist      # 打包产物体检（入口/exports/patch/lib 引用/externals/files）
-npm run check:desensitization   # 合规扫描（发布物与仓库面无内部标识/凭据/本机路径）
-npm run check:host-surface      # 逐条核对宿主契约（slot/primitive/图标/令牌/peer/宿主补丁）
-npm run check:host-settings     # 真实宿主 settings 服务下的设置接线
-npm run check:layout            # 真 Chrome 布局探针（并给出"修复前"对照）
-npm run screenshots             # 重新生成 README 截图（真宿主组件 + 真 client bundle）
-npm run release                 # 以上全部 + npm pack
-```
-
-CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）跑的就是 `npm run release` 的每一步，
-本地与 CI 不会漂移。测试与门禁的判据写在各自脚本的顶部注释里（含"这条断言为什么不是空过的"）。
-
-## 8. 文档地图
+## 6. 文档地图
 
 | 想了解 | 看这里 |
 |---|---|
@@ -220,11 +181,13 @@ CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）跑的就是 `npm 
 | 宿主版本兼容（两代差异与运行时兜底） | [`docs/host-compatibility.md`](docs/host-compatibility.md) |
 | 宿主补丁清单与核对方式 | [`docs/host-patches.md`](docs/host-patches.md) |
 | 规范与实现的映射 | [`docs/spec-implementation-mapping.md`](docs/spec-implementation-mapping.md) |
+| 配置参考（插件配置 / 环境变量 / 状态文件） | [`docs/configuration.md`](docs/configuration.md) |
+| 开发命令与发版门禁 | [`docs/development.md`](docs/development.md) |
 | 插件目录数据管线（发现 / 下载 / 分类 / 评分 / 同步到官网） | [`docs/catalog-pipeline.md`](docs/catalog-pipeline.md) |
 
 English overview: [`README.en.md`](README.en.md)
 
-## 9. 许可与作者
+## 7. 许可与作者
 
 MIT，见 [`LICENSE`](LICENSE)（Copyright © 2026 AndyPBI）。
 
