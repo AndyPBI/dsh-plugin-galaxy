@@ -91,17 +91,17 @@ git clone https://github.com/AndyPBI/dsh-plugin-galaxy.git
 cd dsh-plugin-galaxy
 npm ci                 # 没有 lockfile 的旧版本可用 npm install
 npm run build          # 服务端 tsc → lib/，客户端 tsdown → client/client.js
-npm pack               # 产出 dsh-plugin-galaxy-<version>.tgz
+npm pack               # 产出 tarball，文件名即下一行要装的那个
 
-# 装进你的 profile（把 web 换成你的 profile 名）
-dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.29.tgz
+# 装进你的 profile（把 web 换成你的 profile 名；版本号用 npm pack 打印出来的）
+dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.34.tgz
 ```
 
 ### 路径 B：从 Release 附件安装（仓库发布 Release 后）
 
 ```bash
 dsh plugin --profile web add \
-  https://github.com/AndyPBI/dsh-plugin-galaxy/releases/download/v0.1.29/dsh-plugin-galaxy-0.1.29.tgz
+  https://github.com/AndyPBI/dsh-plugin-galaxy/releases/download/v0.1.34/dsh-plugin-galaxy-0.1.34.tgz
 ```
 
 ### 装完怎么用
