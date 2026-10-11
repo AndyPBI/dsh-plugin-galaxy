@@ -25,10 +25,16 @@
  *     implying an ecosystem that is not there.
  *
  * Usage:
- *   node scripts/build-opc-catalog.mjs [--source <plugins.json|url>] [--out <dir>]
+ *   node scripts/build-opc-catalog.mjs [--source <plugins.json>] [--out <dir>] [--top <n>]
+ *
+ * --top caps how many plugins each category contributes. It defaults to
+ * TOP_PER_CATEGORY and it is a *display* cap, not a data cap: a category with
+ * fewer than `top` qualifying repos keeps all of them (that is why `service` and
+ * `marketing` sit below the cap), and everything cut is written to
+ * `opc-plugins.csv` with `status=dropped` rather than vanishing.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -40,8 +46,36 @@ function arg(name, fallback) {
   return index === -1 || process.argv[index + 1] === undefined ? fallback : process.argv[index + 1]
 }
 
-const source = arg('--source', join(workspace, 'catalog', 'source-plugins.json'))
 const outDir = resolve(arg('--out', join(workspace, 'catalog')))
+/**
+ * Defaults to the snapshot INSIDE the output directory.
+ *
+ * The two options used to default independently — `--out <dir>` still read
+ * `<workspace>/catalog/source-plugins.json` — so a run pointed at another
+ * directory silently generated from the stale workspace copy and threw away the
+ * snapshot discovery had just written next to the output. Same value as before
+ * when neither flag is given; impossible to split when one is.
+ */
+const source = arg('--source', join(outDir, 'source-plugins.json'))
+
+/**
+ * How many plugins each category contributes to the catalog.
+ *
+ * Was a bare `20` inline; named and made configurable in 2026-10 so the cap can
+ * be tuned per run without editing the generator. Entries cut by the cap show up
+ * as `status=dropped` in the CSV rather than vanishing.
+ *
+ * 27 × 15 categories ≈ 405, which is where the ~400 target comes from. It is a
+ * ceiling, not a quota: a category with fewer candidates keeps all of them
+ * (`service` and `marketing` sit below it), so the real total lands a little
+ * under 400.
+ */
+const TOP_PER_CATEGORY = 27
+const topN = Number(arg('--top', String(TOP_PER_CATEGORY)))
+if (!Number.isInteger(topN) || topN < 1) {
+  console.error(`--top 需要正整数，收到 ${arg('--top', '')}`)
+  process.exit(1)
+}
 
 /* ------------------------------------------------------------------ *
  * Categories
@@ -247,6 +281,15 @@ function classify(entry) {
  * Build
  * ------------------------------------------------------------------ */
 
+if (!existsSync(source)) {
+  // Loud on purpose: the failure this guards against used to be silent (the run
+  // picked up a different, stale snapshot and produced plausible-looking output).
+  console.error(`找不到输入快照 ${source}`)
+  console.error('  --source 默认指向 <--out 目录>/source-plugins.json。')
+  console.error('  想从别处读，显式传 --source；想联网生成它，先跑 scripts/discover-dsh-plugins.mjs --out <目录>。')
+  process.exit(1)
+}
+
 const payload = JSON.parse(readFileSync(source, 'utf8'))
 const entries = Array.isArray(payload) ? payload : (payload.plugins ?? payload.registry?.plugins ?? [])
 if (!Array.isArray(entries) || entries.length === 0) {
@@ -305,7 +348,10 @@ const report = CATEGORIES.map(category => {
     ...category,
     total: list.length,
     strong: list.filter(entry => entry.stars >= FLOOR).length,
-    top: list.slice(0, 20),
+    top: list.slice(0, topN),
+    // Kept, not discarded: the CSV marks these `status=dropped` so a plugin that
+    // fell out of the cap is visible instead of silently disappearing.
+    dropped: list.slice(topN),
   }
 })
 
@@ -314,28 +360,39 @@ mkdirSync(outDir, { recursive: true })
 /** Machine-readable rows (one per category × plugin), CSV for spreadsheets. */
 const rows = []
 for (const category of report) {
-  category.top.forEach((entry, index) => {
-    rows.push({
-      category: category.id,
-      categoryLabel: category.label,
-      rank: index + 1,
-      name: entry.name,
-      repo: entry.repo,
-      subpath: entry.subpath,
-      stars: entry.stars,
-      downloads: entry.downloads,
-      npm: entry.npm,
-      url: entry.url,
-      install: entry.install,
-      added: entry.added,
-      kind: entry.subpath === '' ? 'standalone' : 'monorepo-subpath',
-    })
+  /**
+   * `rank` counts through the cap, so a dropped entry keeps its true position
+   * (21, 22, …) instead of restarting at 1 and colliding with the kept ones.
+   */
+  const push = (entry, rank, status) => rows.push({
+    category: category.id,
+    categoryLabel: category.label,
+    rank,
+    name: entry.name,
+    repo: entry.repo,
+    subpath: entry.subpath,
+    stars: entry.stars,
+    downloads: entry.downloads,
+    npm: entry.npm,
+    url: entry.url,
+    install: entry.install,
+    added: entry.added,
+    kind: entry.subpath === '' ? 'standalone' : 'monorepo-subpath',
+    status,
   })
+  category.top.forEach((entry, index) => push(entry, index + 1, 'kept'))
+  category.dropped.forEach((entry, index) => push(entry, topN + index + 1, 'dropped'))
 }
 
+/**
+ * Only kept rows reach the catalog. The CSV carries every candidate so an entry
+ * cut by the cap is still auditable — this is the only consumer of `dropped`.
+ */
+const keptRows = rows.filter(row => row.status === 'kept')
+
 const csv = [
-  'category,categoryLabel,rank,name,repo,subpath,stars,downloads,npm,url,kind',
-  ...rows.map(row => [row.category, row.categoryLabel, row.rank, row.name, row.repo, row.subpath, row.stars, row.downloads ?? '', row.npm ?? '', row.url, row.kind]
+  'category,categoryLabel,rank,name,repo,subpath,stars,downloads,npm,url,kind,status',
+  ...rows.map(row => [row.category, row.categoryLabel, row.rank, row.name, row.repo, row.subpath, row.stars, row.downloads ?? '', row.npm ?? '', row.url, row.kind, row.status]
     .map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')),
 ].join('\n') + '\n'
 
@@ -355,8 +412,9 @@ const catalogJson = {
     why: category.why,
     matched: category.total,
     strong: category.strong,
+    droppedCount: category.dropped.length,
   })),
-  plugins: rows.map(row => ({
+  plugins: keptRows.map(row => ({
     name: row.name,
     ...(row.npm === null ? {} : { npm: row.npm }),
     url: row.url,
@@ -509,7 +567,8 @@ if (process.argv.includes('--explain')) {
   }
 }
 
-console.log(`entries=${entries.length} repos=${all.size} uncategorized=${uncategorized} listed=${rows.length} → ${outDir}`)
+console.log(`entries=${entries.length} repos=${all.size} uncategorized=${uncategorized} listed=${keptRows.length} cap=${topN}/类 → ${outDir}`)
 for (const category of report) {
-  console.log(`  ${category.id.padEnd(11)} total=${String(category.total).padStart(4)} strong=${String(category.strong).padStart(3)} top=${category.top.length}`)
+  const dropped = category.dropped.length === 0 ? '' : ` dropped=${category.dropped.length}`
+  console.log(`  ${category.id.padEnd(11)} total=${String(category.total).padStart(4)} strong=${String(category.strong).padStart(3)} kept=${category.top.length}${dropped}`)
 }

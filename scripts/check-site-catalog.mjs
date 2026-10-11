@@ -207,10 +207,15 @@ check('7.11 ranking.listN matches the published list length when present',
   ranking?.listN === undefined || ranking.listN === top.length,
   `listN=${String(ranking?.listN)} top=${String(top.length)}`)
 
+// `curated` is excluded on purpose: the hand-picked 甄选 plugins are pinned to the top of
+// the site and deliberately unranked, so they carry no score / band / scoreParts. Every
+// OTHER row must have all three — that is what this check really guards, namely that
+// `catalog:ranking` was not run after `catalog:build` and silently wiped the whole block.
 const unranked = plugins.filter(row =>
-  typeof row?.score !== 'number' || typeof row?.band !== 'string'
-  || typeof row?.scoreParts !== 'object' || row.scoreParts === null)
-check('7.12 every row carries score / band / scoreParts (panel badge + hover explanation)',
+  row?.category !== 'curated'
+  && (typeof row?.score !== 'number' || typeof row?.band !== 'string'
+    || typeof row?.scoreParts !== 'object' || row.scoreParts === null))
+check('7.12 every ranked row carries score / band / scoreParts (panel badge + hover explanation)',
   unranked.length === 0, unranked.slice(0, 3).map(row => row?.key).join(', '))
 const outOfRange = plugins.filter(row => typeof row?.score === 'number' && (row.score < 0 || row.score > 100))
 check('7.13 every score is inside 0..100', outOfRange.length === 0,

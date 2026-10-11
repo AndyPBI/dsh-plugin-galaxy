@@ -219,6 +219,7 @@ CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）跑的就是 `npm 
 | 宿主版本兼容（两代差异与运行时兜底） | [`docs/host-compatibility.md`](docs/host-compatibility.md) |
 | 宿主补丁清单与核对方式 | [`docs/host-patches.md`](docs/host-patches.md) |
 | 规范与实现的映射 | [`docs/spec-implementation-mapping.md`](docs/spec-implementation-mapping.md) |
+| 插件目录数据管线（发现 / 下载 / 分类 / 评分 / 同步到官网） | [`docs/catalog-pipeline.md`](docs/catalog-pipeline.md) |
 
 English overview: [`README.en.md`](README.en.md)
 
