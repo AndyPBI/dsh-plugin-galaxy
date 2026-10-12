@@ -86,7 +86,7 @@ export const DEFAULT_NPM_REGISTRY = 'https://registry.npmjs.org'
 export const CHINA_NPM_MIRROR = 'https://mirrors.cloud.tencent.com/npm'
 
 /** The catalog's stable public address (a custom domain, not a repo path). */
-export const CATALOG_ORIGIN = 'https://awesome-dsh-plugin.com/plugins.json'
+export const CATALOG_ORIGIN = 'https://www.yhaigc.cn/assets/plugins/catalog.json'
 
 /**
  * The npm package carrying the same catalog, used as China's first route.
@@ -99,6 +99,15 @@ export const CATALOG_ORIGIN = 'https://awesome-dsh-plugin.com/plugins.json'
 export const CATALOG_PACKAGE = 'dsh-plugin-catalog'
 
 /** The default release-notes origin (beside `plugins.json`). */
+/**
+ * Release-notes origin, deliberately NOT the catalog's site.
+ *
+ * `updates.json` is the daily release/commit digest the notes dialog slices at the
+ * installed revision; the operator's site serves the catalog but not that digest
+ * (404), and an empty digest means an empty dialog. Until it is published there,
+ * the aggregate keeps supplying it — the two origins are independent, and
+ * `DSHG_UPDATES_ORIGIN` moves this one alone.
+ */
 export const DEFAULT_UPDATES_ORIGIN = 'https://awesome-dsh-plugin.com/updates.json'
 
 /** Canonical (unproxied) GitHub bases. */

@@ -166,7 +166,7 @@ dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.34.tgz
 |---|---|
 | 设置里看不到「插件星系」 | 装完必须**完整重启宿主**；确认 profile 里已启用（面板「已安装」或 `dsh plugin --profile web list`） |
 | 目录是旧的 / 有新插件看不到 | 面板右上「刷新」强制重新校验（ETag）；或检查 `catalogUrl` 指向 |
-| 条数不对（如 4508 个）/ 没有推荐、没有分类筛选 | 该 profile 没配目录地址，回落到了内置公共目录：在**设置 → 目录来源**填官网 `catalog.json` 地址（或设 `DSHG_REGISTRY_URL`） |
+| 条数不对 / 没有推荐、没有分类筛选 | 默认目录就是**官网**（`www.yhaigc.cn`）；若该 profile 被指到别处（`DSHG_REGISTRY_URL` 或「设置 → 目录来源」里的值优先），改回官网地址即可 |
 | 桌面版里看不到「一键重启」 | 设计如此：打包应用拥有进程生命周期，重启由应用负责（Web 形态下 supervisor 未显式允许时同样禁用） |
 | 更新检查说"不检查更新" | 该插件是从本地 tarball（`file:`）装的，没有可比对的远端版本 |
 | 兼容性显示"未知" | 尚未拿到该包的 manifest 事实（首次会异步探测，之后按 TTL 缓存） |

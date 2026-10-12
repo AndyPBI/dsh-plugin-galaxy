@@ -343,3 +343,25 @@ describe('category vocabulary shapes', () => {
     for (const value of [undefined, null, 42, 'nope']) expect(normalizeCategories(value)).toEqual([])
   })
 })
+
+/**
+ * The built-in default catalog is the operator's own site. It used to be the
+ * public aggregate, where every category-driven surface silently degraded (no
+ * `ranking` block, a MAP-shaped vocabulary) — an unconfigured desktop install
+ * looked broken. Precedence is pinned here too: environment, then profile, then
+ * this default.
+ */
+describe('built-in default catalog', () => {
+  it('points at the official site, not a third-party aggregate', async () => {
+    const { catalogUrl, DEFAULT_CATALOG_URL } = await import('../src/domain/registry.ts')
+    expect(DEFAULT_CATALOG_URL).toBe('https://www.yhaigc.cn/assets/plugins/catalog.json')
+    expect(catalogUrl({}, {})).toBe(DEFAULT_CATALOG_URL)
+  })
+
+  it('still lets the environment and the profile override it', async () => {
+    const { catalogUrl, DEFAULT_CATALOG_URL } = await import('../src/domain/registry.ts')
+    expect(catalogUrl({ DSHG_REGISTRY_URL: 'https://cdn.example/c.json' }, {})).toBe('https://cdn.example/c.json')
+    expect(catalogUrl({}, { catalogUrl: 'https://profile.example/c.json' })).toBe('https://profile.example/c.json')
+    expect(catalogUrl({}, { catalogUrl: '   ' })).toBe(DEFAULT_CATALOG_URL)
+  })
+})

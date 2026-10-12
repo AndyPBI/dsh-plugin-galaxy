@@ -142,7 +142,7 @@ export const settingsZh: Dict = {
   setChannelDev: '开发版',
   setChannelOk: '通道已切换。',
   setCatalogTitle: '目录来源',
-  setCatalogHint: '面板读哪份插件目录、卡片链到哪个官网。留空表示回落（环境变量 → 内置公共目录）。',
+  setCatalogHint: '面板读哪份插件目录、卡片链到哪个官网。留空表示回落（环境变量 → 内置默认目录 = 官网）。',
   setCatalogUrlLabel: '目录地址',
   setCatalogUrlPlaceholder: 'https://www.yhaigc.cn/assets/plugins/catalog.json',
   setSiteUrlLabel: '官网基址',
@@ -156,7 +156,7 @@ export const settingsZh: Dict = {
   setCatalogEffective: '当前生效：{url}（来源：{source}）',
   setCatalogSourceEnv: '环境变量',
   setCatalogSourceProfile: '本 profile 设置',
-  setCatalogSourceDefault: '内置公共目录',
+  setCatalogSourceDefault: '内置默认目录（官网）',
   setChannelFail: '切换通道失败',
 
   /* restart ——— */
@@ -423,7 +423,7 @@ export const settingsEn: Dict = {
   setChannelDev: 'Dev',
   setChannelOk: 'Channel changed.',
   setCatalogTitle: 'Catalog source',
-  setCatalogHint: 'Which catalog the panel reads and which site its cards link to. Empty falls back (environment → built-in public catalog).',
+  setCatalogHint: 'Which catalog the panel reads and which site its cards link to. Empty falls back (environment → built-in default catalog = the official site).',
   setCatalogUrlLabel: 'Catalog URL',
   setCatalogUrlPlaceholder: 'https://www.yhaigc.cn/assets/plugins/catalog.json',
   setSiteUrlLabel: 'Plugin site',
@@ -437,7 +437,7 @@ export const settingsEn: Dict = {
   setCatalogEffective: 'In effect: {url} (source: {source})',
   setCatalogSourceEnv: 'environment',
   setCatalogSourceProfile: 'this profile',
-  setCatalogSourceDefault: 'built-in public catalog',
+  setCatalogSourceDefault: 'built-in default catalog',
   setChannelFail: 'Could not change the channel',
 
   /* restart ——— */

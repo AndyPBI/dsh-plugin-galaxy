@@ -17,7 +17,7 @@
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `DSHG_REGISTRY_URL` | 内置公共目录 | 自定义 catalog |
+| `DSHG_REGISTRY_URL` | 内置默认目录（官网 `www.yhaigc.cn`） | 自定义 catalog |
 | `DSHG_SITE_URL` | 未设置（由 catalog origin 推导） | 插件官网基址；设置后每张卡片都深链到 `<基址>/#/ai/p/<owner%2Fname>` |
 | `DSHG_NPM_MIRROR` | 未设置 | 覆盖 npm registry 基址 |
 | `DSHG_GITHUB_PROXY` | 未设置 | 操作员托管的 GitHub 前缀代理（设置后 UI 锁定） |
@@ -47,8 +47,20 @@
 | 显示 | 含义 |
 |---|---|
 | 当前生效 | 真正在用的 catalog URL |
-| 来源 | `环境变量` / `本 profile 设置` / `内置公共目录` —— 环境变量优先，所以"保存了却不变"会在这里被解释清楚 |
+| 来源 | `环境变量` / `本 profile 设置` / `内置默认目录（官网）` —— 环境变量优先，所以"保存了却不变"会在这里被解释清楚 |
 
-> 一台机器上装了桌面版却"显示 4508 个插件、没有甄选、没有分类筛选"，就是这里没配：
-> 回落到了内置公共目录（`awesome-dsh-plugin.com/plugins.json`，4508 条、无推荐块、
-> `categories` 为映射形状）。配好 `catalogUrl` + `siteUrl` 即可。
+> 内置默认目录 = **官网** `https://www.yhaigc.cn/assets/plugins/catalog.json`（2026-10 起）。
+> 在此之前默认是公共聚合目录（4508 条、无推荐块、`categories` 为映射形状），桌面版新装时会显示 4508 条、
+> 没有甄选与分类筛选 —— 现在装上即与官网一致，无需配置。
+
+### 4.1 更新说明（`updates.json`）与目录是两个来源
+
+| | 目录 | 更新说明 |
+|---|---|---|
+| 默认地址 | 官网 `…/assets/plugins/catalog.json` | 聚合源 `awesome-dsh-plugin.com/updates.json` |
+| 环境变量 | `DSHG_REGISTRY_URL` | `DSHG_UPDATES_ORIGIN` |
+| 作用 | 发现 / 分类 / 甄选 / 推荐榜 / 深链 / 安装目标 | 面板「更新日志」的内容（每天生成一次的 release 与提交摘要） |
+
+官网目前**不提供** `updates.json`（404），所以更新说明仍取聚合源：把它也指到官网会让「更新日志」变成空内容
+（不会报错，只是没有东西可显示）。想自建时按 `{ updates: { "<行的 url>": { release|releases, commits } } }`
+的形状发布一份静态 JSON，再用 `DSHG_UPDATES_ORIGIN` 指过去即可。

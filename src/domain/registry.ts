@@ -29,7 +29,17 @@ import { catalogFromPackage } from './catalog-npm.ts'
 const CACHE_KEY = 'catalog.validators'
 
 /** The curated catalog's stable public address. */
-export const DEFAULT_CATALOG_URL = 'https://awesome-dsh-plugin.com/plugins.json'
+/**
+ * The catalog the panel reads when nothing else is configured.
+ *
+ * This is the operator's own site, not a third-party aggregate: the panel's
+ * categories, featured picks and deep links are all built around it, and an
+ * unconfigured profile used to fall back to the public aggregate (4508 rows, no
+ * `ranking` block, a MAP-shaped vocabulary) where every one of those surfaces
+ * silently degraded. Precedence is unchanged — `DSHG_REGISTRY_URL`, then the
+ * profile's `catalogUrl`, then this.
+ */
+export const DEFAULT_CATALOG_URL = 'https://www.yhaigc.cn/assets/plugins/catalog.json'
 
 /**
  * How long to wait for the catalog. A far-away link carrying a few hundred
