@@ -1,6 +1,7 @@
 # Plugin Galaxy · `dsh-plugin-galaxy`
 
 [![ci](https://github.com/AndyPBI/dsh-plugin-galaxy/actions/workflows/ci.yml/badge.svg)](https://github.com/AndyPBI/dsh-plugin-galaxy/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/AndyPBI/dsh-plugin-galaxy)](https://github.com/AndyPBI/dsh-plugin-galaxy/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![host](https://img.shields.io/badge/DSH-0.1.5%20%7C%200.2.1-informational)](docs/host-compatibility.md)
 [![telemetry](https://img.shields.io/badge/telemetry-none-success)](#权限与安全)
@@ -84,7 +85,14 @@
 > **本插件不在 npm 上**（`registry.npmjs.org/dsh-plugin-galaxy` 不存在），
 > 所以 `dsh plugin add dsh-plugin-galaxy` 不会成功。请用下面两条路径之一。
 
-### 路径 A：从源码构建（推荐，当前确定可用）
+### 路径 A：从 Release 安装（**推荐**，免构建）
+
+```bash
+dsh plugin --profile web add \
+  https://github.com/AndyPBI/dsh-plugin-galaxy/releases/download/v0.1.34/dsh-plugin-galaxy-0.1.34.tgz
+```
+
+### 路径 B：从源码构建（用于自行审计或改代码）
 
 ```bash
 git clone https://github.com/AndyPBI/dsh-plugin-galaxy.git
@@ -95,13 +103,6 @@ npm pack               # 产出 tarball，文件名即下一行要装的那个
 
 # 装进你的 profile（把 web 换成你的 profile 名；版本号用 npm pack 打印出来的）
 dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.34.tgz
-```
-
-### 路径 B：从 Release 附件安装（仓库发布 Release 后）
-
-```bash
-dsh plugin --profile web add \
-  https://github.com/AndyPBI/dsh-plugin-galaxy/releases/download/v0.1.34/dsh-plugin-galaxy-0.1.34.tgz
 ```
 
 ### 装完怎么用

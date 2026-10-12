@@ -1,6 +1,7 @@
 # Plugin Galaxy · `dsh-plugin-galaxy`
 
 [![ci](https://github.com/AndyPBI/dsh-plugin-galaxy/actions/workflows/ci.yml/badge.svg)](https://github.com/AndyPBI/dsh-plugin-galaxy/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/AndyPBI/dsh-plugin-galaxy)](https://github.com/AndyPBI/dsh-plugin-galaxy/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![host](https://img.shields.io/badge/DSH-0.1.5%20%7C%200.2.1-informational)](docs/host-compatibility.md)
 [![telemetry](https://img.shields.io/badge/telemetry-none-success)](#permissions--security)
@@ -47,14 +48,19 @@ driven by two self-owned contracts — [`docs/implementation-contract.md`](docs/
 ## Install
 
 The package is **not published to npm**, so `dsh plugin add dsh-plugin-galaxy` cannot work.
-Build it, then install the tarball that `npm pack` prints:
+Install the release asset (**recommended** — nothing to build):
+
+```bash
+dsh plugin --profile web add \
+  https://github.com/AndyPBI/dsh-plugin-galaxy/releases/download/v0.1.34/dsh-plugin-galaxy-0.1.34.tgz
+```
+
+Or build it yourself (for auditing the source or changing it):
 
 ```bash
 git clone https://github.com/AndyPBI/dsh-plugin-galaxy.git
 cd dsh-plugin-galaxy
-npm ci
-npm run build
-npm pack
+npm ci && npm run build && npm pack
 
 dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.34.tgz
 ```
