@@ -1265,3 +1265,39 @@ describe('Discover — the featured category is a chip, and the controls share a
     expect(line?.className).toContain('toolbarControlsLine')
   })
 })
+
+/**
+ * Changing the catalog source in the settings card must reload the list the panel
+ * already holds: the two are separate subtrees of the same bundle, and without the
+ * event the panel would keep showing the previous catalog until someone pressed
+ * refresh — which is how a wrong `catalogUrl` looked like a broken plugin.
+ */
+describe('Discover — a catalog source change reloads the panel', () => {
+  it('refetches the registry when the settings card announces a change', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, method: init?.method ?? 'GET' })
+      if (url.includes('/registry')) return json({ registry: { plugins: CATALOG, count: CATALOG.length } })
+      if (url.includes('/installed')) return json(INVENTORY)
+      if (url.includes('/updates')) return json([])
+      if (url.includes('/discovery-compatibility')) return json({ results: [] })
+      if (url.includes('/status')) {
+        return json({
+          boot: 'test-boot', version: '0.1.1', channel: 'stable', region: 'global', profile: 'web',
+          busy: false, progress: { active: false }, pnpm: { ok: true },
+          restart: { allowed: false, debugger: false, scheduled: false }, installed: [],
+        })
+      }
+      return json({ ok: true })
+    }) as typeof fetch
+
+    const host = await mount()
+    await flush()
+    const before = calls.filter(entry => entry.url.includes('/registry')).length
+    window.dispatchEvent(new CustomEvent('dsh-galaxy:catalog-source-changed'))
+    await flush()
+    const after = calls.filter(entry => entry.url.includes('/registry')).length
+    expect(after).toBeGreaterThan(before)
+    expect(cardTitles(host).length).toBeGreaterThan(0)
+  })
+})

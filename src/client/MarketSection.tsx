@@ -2105,6 +2105,15 @@ export function MarketSection(props: {
     }
   }, [loadRegistry, refreshInventory, refreshUpdates])
 
+  // The settings card changes the catalog source; that list is already in memory
+  // here, so without this the panel would keep showing the previous catalog until
+  // someone pressed refresh.
+  useEffect(() => {
+    const onChanged = (): void => { void reloadAll() }
+    window.addEventListener('dsh-galaxy:catalog-source-changed', onChanged)
+    return () => { window.removeEventListener('dsh-galaxy:catalog-source-changed', onChanged) }
+  }, [reloadAll])
+
   /* —— render —— */
 
   return (

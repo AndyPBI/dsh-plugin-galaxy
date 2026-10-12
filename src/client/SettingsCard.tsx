@@ -35,6 +35,7 @@ import {
   fetchBackup,
   fetchInstalled,
   fetchStatus,
+  setCatalogSource,
   gistAction,
   isGalaxyApiError,
   restoreBackupFile,
@@ -44,6 +45,7 @@ import {
   setGithubProxy,
   setRegion,
   webdavAction,
+  CatalogSourceView,
 } from './market-data.ts'
 
 /**
@@ -83,6 +85,13 @@ interface StatusExtras {
   githubProxyCustom?: string | null
   githubProxyManaged?: boolean
   regionAuto?: boolean
+  /** Catalog source facts, written by the status route. */
+  catalogUrl?: string
+  siteUrl?: string
+  envCatalog?: boolean
+  envSite?: boolean
+  effectiveCatalogUrl?: string
+  catalogSource?: 'env' | 'profile' | 'default'
 }
 
 /** Inline result of one action. */
@@ -102,6 +111,7 @@ type SectionId =
   | 'region'
   | 'proxy'
   | 'channel'
+  | 'catalogSource'
   | 'restart'
   | 'remove'
 
@@ -238,6 +248,10 @@ export function SettingsCard(props: {
   const [backup, setBackup] = useState<Backup | null>(null)
   /** A backup retrieved from WebDAV/Gist, awaiting an explicit restore. */
   const [fetched, setFetched] = useState<{ source: string; backup: Backup } | null>(null)
+  /** Catalog source: stored values + which layer wins (see the route's comment). */
+  const [catalogSource, setCatalogSourceState] = useState<CatalogSourceView | null>(null)
+  const [catalogDraft, setCatalogDraft] = useState('')
+  const [siteDraft, setSiteDraft] = useState('')
   const [proxyManaged, setProxyManaged] = useState(false)
   const [proxyDraft, setProxyDraft] = useState('')
   const [webdavUrl, setWebdavUrl] = useState('')
@@ -267,6 +281,18 @@ export function SettingsCard(props: {
   const load = useCallback(async (): Promise<void> => {
     try {
       const [installed, next] = await Promise.all([fetchInstalled(), fetchStatus()])
+      // The status payload carries the catalog source; no second request.
+      const catalog = next as unknown as StatusExtras
+      setCatalogSourceState({
+        catalogUrl: catalog.catalogUrl ?? '',
+        siteUrl: catalog.siteUrl ?? '',
+        envCatalog: catalog.envCatalog === true,
+        envSite: catalog.envSite === true,
+        effectiveCatalogUrl: catalog.effectiveCatalogUrl ?? '',
+        catalogSource: catalog.catalogSource ?? 'default',
+      })
+      setCatalogDraft(current => (current === '' ? (catalog.catalogUrl ?? '') : current))
+      setSiteDraft(current => (current === '' ? (catalog.siteUrl ?? '') : current))
       setSummary({ profile: installed.profile, count: (installed.installed ?? []).length })
       setStatus(next)
       const extras = next as unknown as StatusExtras
@@ -368,6 +394,34 @@ export function SettingsCard(props: {
   /* ---------------------------------------------------------------- *
    * WebDAV
    * ---------------------------------------------------------------- */
+
+  /**
+   * Save the catalog source, then tell the panel to reload.
+   *
+   * The panel and this card are separate subtrees of the same bundle, and the
+   * panel holds the registry it already fetched: without the event it would keep
+   * showing the previous catalog until the user happened to press refresh.
+   */
+  const onCatalogSource = useCallback((clear: boolean): void => {
+    void run('catalogSource', 'catalogSource', 'setCatalogFail', async () => {
+      const next = await setCatalogSource(clear
+        ? { catalogUrl: '', siteUrl: '' }
+        : { catalogUrl: catalogDraft.trim(), siteUrl: siteDraft.trim() })
+      setCatalogSourceState(next)
+      if (clear) {
+        setCatalogDraft('')
+        setSiteDraft('')
+      }
+      window.dispatchEvent(new CustomEvent('dsh-galaxy:catalog-source-changed'))
+      notice('catalogSource', {
+        kind: 'ok',
+        text: `${t('setCatalogOk')} ${t('setCatalogEffective', {
+          url: next.effectiveCatalogUrl,
+          source: t(next.catalogSource === 'env' ? 'setCatalogSourceEnv' : next.catalogSource === 'profile' ? 'setCatalogSourceProfile' : 'setCatalogSourceDefault'),
+        })}`,
+      })
+    })
+  }, [catalogDraft, siteDraft, notice, run, t])
 
   /**
    * Read the password out of the DOM and wipe the field in the same turn: the
@@ -728,6 +782,55 @@ export function SettingsCard(props: {
                 >{t(REGION_LABEL[id])}</Button>
               ))}
             </div>
+          </Section>
+
+          <Section
+            title={t('setCatalogTitle')}
+            hint={catalogSource !== null && (catalogSource.envCatalog || catalogSource.envSite)
+              ? t('setCatalogEnv', { name: catalogSource.envCatalog ? 'DSHG_REGISTRY_URL' : 'DSHG_SITE_URL' })
+              : t('setCatalogHint')}
+            notice={notices.catalogSource}
+          >
+            <Field
+              label={t('setCatalogUrlLabel')}
+              type="url"
+              value={catalogDraft}
+              placeholder={t('setCatalogUrlPlaceholder')}
+              disabled={busy}
+              onChange={setCatalogDraft}
+            />
+            <Field
+              label={t('setSiteUrlLabel')}
+              type="url"
+              value={siteDraft}
+              placeholder={t('setSiteUrlPlaceholder')}
+              disabled={busy}
+              onChange={setSiteDraft}
+            />
+            <div className={css.toolbar}>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={busy}
+                onClick={() => { onCatalogSource(false) }}
+              >{pending === 'catalogSource' ? t('setCatalogSaving') : t('setCatalogSave')}</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => { onCatalogSource(true) }}
+              >{t('setCatalogClear')}</Button>
+            </div>
+            {catalogSource !== null ? (
+              <p className={css.muted}>
+                {t('setCatalogEffective', {
+                  url: catalogSource.effectiveCatalogUrl,
+                  source: t(catalogSource.catalogSource === 'env'
+                    ? 'setCatalogSourceEnv'
+                    : catalogSource.catalogSource === 'profile' ? 'setCatalogSourceProfile' : 'setCatalogSourceDefault'),
+                })}
+              </p>
+            ) : null}
           </Section>
 
           <Section

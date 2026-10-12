@@ -33,9 +33,22 @@
 
 | 键 | 位置 | 作用 |
 |---|---|---|
-| `catalogUrl` | `<profile>/.dsh-galaxy/state.json` | profile 级目录数据源（优先级低于 `DSHG_REGISTRY_URL`） |
+| `catalogUrl` | 面板「设置 → 目录来源」，落在 `<profile>/.dsh-galaxy/state.json` | profile 级目录数据源（优先级低于 `DSHG_REGISTRY_URL`） |
 | `siteUrl` | 同上 | profile 级官网基址（优先级低于 `DSHG_SITE_URL`） |
 | `channel` / `region` | 同上 | 发布通道与下载区域（面板设置卡片里可改） |
 | `disabled` / `groups` / `notes` / `favorites` | 同上 | 启停、分组、备注、收藏 |
 
 状态文件与其它落盘位置（快照、预设、日志）的完整清单见 `docs/implementation-contract.md`。
+
+## 4. 目录来源（面板里可改）
+
+面板「设置 → 目录来源」写的就是上面两个 profile 级键，读侧从 `/status` 返回：
+
+| 显示 | 含义 |
+|---|---|
+| 当前生效 | 真正在用的 catalog URL |
+| 来源 | `环境变量` / `本 profile 设置` / `内置公共目录` —— 环境变量优先，所以"保存了却不变"会在这里被解释清楚 |
+
+> 一台机器上装了桌面版却"显示 4508 个插件、没有甄选、没有分类筛选"，就是这里没配：
+> 回落到了内置公共目录（`awesome-dsh-plugin.com/plugins.json`，4508 条、无推荐块、
+> `categories` 为映射形状）。配好 `catalogUrl` + `siteUrl` 即可。

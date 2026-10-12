@@ -49,6 +49,7 @@ import { progressTracker } from '../domain/progress.ts'
 import { probePnpm } from '../domain/pnpm-compat.ts'
 import { resolveRegion } from '../domain/regions.ts'
 import { restartCapability } from '../domain/restart.ts'
+import { catalogSourceView } from '../domain/catalog-source.ts'
 
 /** How long a pnpm probe stays usable before it is re-measured. */
 const PNPM_CACHE_TTL_MS = 60_000
@@ -185,6 +186,9 @@ export function registerHostRoutes(router: Router, runtime: GalaxyRuntime): void
       pnpm: await pnpmProbe(runtime),
       restart: safeRestart(runtime.config, runtime),
       installed: safeInstalled(runtime),
+      // Which catalog this profile reads, and which layer decided it — the
+      // settings card shows it and the write route returns the same shape.
+      ...catalogSourceView(runtime.dir),
     } satisfies GalaxyStatus
     sendJson(response, 200, status)
   })

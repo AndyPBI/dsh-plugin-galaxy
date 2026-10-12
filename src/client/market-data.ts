@@ -319,6 +319,13 @@ export interface RestartSchedule {
 
 /** Payload of `GET /dsh-galaxy/status`. */
 export interface GalaxyStatus {
+  /** Catalog source facts (see the settings card and `setCatalogSource`). */
+  catalogUrl?: string
+  siteUrl?: string
+  envCatalog?: boolean
+  envSite?: boolean
+  effectiveCatalogUrl?: string
+  catalogSource?: 'env' | 'profile' | 'default'
   boot: string
   version: string
   channel: Channel
@@ -1051,6 +1058,28 @@ export function setChannel(channel: Channel): Promise<OkResponse> {
 /** Switch the download region. */
 export function setRegion(region: Region): Promise<OkResponse> {
   return request<OkResponse>('/region', { method: 'POST', body: { region } })
+}
+
+/** Where the panel's catalog comes from, and which layer wins. */
+export interface CatalogSourceView {
+  /** The profile's stored value; empty when unset. */
+  catalogUrl: string
+  siteUrl: string
+  /** True when an environment variable overrides the stored value. */
+  envCatalog: boolean
+  envSite: boolean
+  /** The URL actually in use right now. */
+  effectiveCatalogUrl: string
+  catalogSource: 'env' | 'profile' | 'default'
+}
+
+/**
+ * Point this profile at another catalog / plugin website. An empty string clears
+ * the stored override, which falls back to the environment or the built-in
+ * public catalog.
+ */
+export function setCatalogSource(input: { catalogUrl?: string; siteUrl?: string }): Promise<CatalogSourceView & OkResponse> {
+  return request<CatalogSourceView & OkResponse>('/catalog-source', { method: 'POST', body: input })
 }
 
 /** Set (or clear, with an empty string) the custom GitHub prefix proxy. */

@@ -19,7 +19,8 @@
 import { asRecord, boolParam, readJsonBody, sendJson } from '../core/http.ts'
 import { logEvent } from '../core/log.ts'
 import type { GalaxyRuntime } from '../core/runtime.ts'
-import { setChannel } from '../core/state.ts'
+import { setCatalogUrl, setChannel, setSiteUrl } from '../core/state.ts'
+import { catalogSourceView } from '../domain/catalog-source.ts'
 import { updateNotesFor } from '../domain/changelog.ts'
 import { asChannel } from '../domain/channels.ts'
 import {
@@ -97,6 +98,37 @@ export function registerNetworkRoutes(router: Router, runtime: GalaxyRuntime): v
    * channel and would otherwise keep answering for a setting that no longer
    * applies.
    */
+  /**
+   * Point this profile at another catalog / plugin website (empty clears).
+   *
+   * Read side lives in the status payload (see `catalogSourceView`), so the path
+   * has exactly one registration — the settings card already polls `/status`.
+   */
+  router.post(`${BASE_PATH}/catalog-source`, async ({ request, response }) => {
+    const body = asRecord(await readJsonBody(request))
+    const entries = ['catalogUrl', 'siteUrl'].filter(key => typeof body?.[key] === 'string')
+    if (entries.length === 0) {
+      sendJson(response, 400, { error: 'catalogUrl or siteUrl must be a string (empty clears the override)' })
+      return
+    }
+    for (const key of entries) {
+      const value = String(body?.[key] ?? '').trim()
+      if (value !== '' && !/^https?:\/\/[^\s]+$/u.test(value)) {
+        sendJson(response, 400, { error: `${key} must be an http(s) URL, or empty to clear it` })
+        return
+      }
+    }
+    await runtime.locks.withLock('write', 'catalog-source', () => {
+      if (entries.includes('catalogUrl')) setCatalogUrl(runtime.dir, String(body?.catalogUrl ?? ''))
+      if (entries.includes('siteUrl')) setSiteUrl(runtime.dir, String(body?.siteUrl ?? ''))
+    })
+    // The update listing and the compatibility facts were computed against the old
+    // origins; the catalog validator is keyed by URL and drops itself.
+    invalidateUpdates(runtime)
+    logEvent('info', 'catalog', `catalog source set (${entries.join(', ')})`)
+    sendJson(response, 200, { ok: true, ...catalogSourceView(runtime.dir) })
+  })
+
   router.post(`${BASE_PATH}/channel`, async ({ request, response }) => {
     const wanted = asChannel(asRecord(await readJsonBody(request))?.channel)
     if (wanted === undefined) {

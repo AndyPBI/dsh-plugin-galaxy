@@ -244,35 +244,71 @@ function asRegistry(value: unknown): Registry {
   // list, so both normalize here — dropping the objects (a `typeof item ===
   // 'string'` filter did exactly that) is how every card fell back to printing
   // the raw slug.
-  if (Array.isArray(record.categories)) {
-    const categories: RegistryCategory[] = []
-    for (const item of record.categories) {
-      if (typeof item === 'string') {
-        const id = item.trim()
-        if (id !== '') categories.push({ id })
-        continue
-      }
-      if (item === null || typeof item !== 'object') continue
-      const entry = item as { id?: unknown; label?: unknown; labelEn?: unknown; count?: unknown }
-      const id = typeof entry.id === 'string' ? entry.id.trim() : ''
-      if (id === '') continue
-      const label = nonEmptyString(entry.label)
-      const labelEn = nonEmptyString(entry.labelEn)
-      categories.push({
-        id,
-        ...(label === undefined ? {} : { label }),
-        ...(labelEn === undefined ? {} : { labelEn }),
-        ...(typeof entry.count === 'number' && Number.isFinite(entry.count) ? { count: entry.count } : {}),
-      })
-    }
-    if (categories.length > 0) registry.categories = categories
-  }
+  const categories = normalizeCategories(record.categories)
+  if (categories.length > 0) registry.categories = categories
   // The recommendation block must survive this rebuild: it is what the "未安装"
   // view renders, and a catalog that ships one should not have it silently
   // dropped (the same way the per-row `key` was, which disabled every site link).
   const ranking = asRegistryRanking(record.ranking)
   if (ranking !== undefined) registry.ranking = ranking
   return registry
+}
+
+/**
+ * Normalize a catalog's category vocabulary into {@link RegistryCategory}[].
+ *
+ * Two shapes are in the wild and both must work, because the panel's category
+ * surfaces are entirely data-driven — a dropped vocabulary is an invisible
+ * selector and no featured chip:
+ *
+ *   - the community site ships an ARRAY of objects: `[{ id, label, labelEn, count }]`
+ *   - the public aggregate ships a MAP keyed by slug: `{ agi: { zh, en } }`
+ *
+ * Older catalogs shipped bare strings in either position, which become an id-only
+ * entry (the label then falls back to the slug). Label keys are read in the order
+ * `label` → `zh` → `name`, and `labelEn` → `en`, so neither vocabulary has to be
+ * rewritten to fit this plugin.
+ */
+export function normalizeCategories(input: unknown): RegistryCategory[] {
+  const items: unknown[] = Array.isArray(input)
+    ? input
+    : (input !== null && typeof input === 'object'
+        ? Object.entries(input as Record<string, unknown>).map(([id, value]) => (
+            value !== null && typeof value === 'object'
+              ? { id, ...(value as Record<string, unknown>) }
+              : { id, label: value }
+          ))
+        : [])
+
+  const categories: RegistryCategory[] = []
+  for (const item of items) {
+    if (typeof item === 'string') {
+      const id = item.trim()
+      if (id !== '') categories.push({ id })
+      continue
+    }
+    if (item === null || typeof item !== 'object') continue
+    const entry = item as {
+      id?: unknown
+      label?: unknown
+      labelEn?: unknown
+      zh?: unknown
+      en?: unknown
+      name?: unknown
+      count?: unknown
+    }
+    const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+    if (id === '') continue
+    const label = nonEmptyString(entry.label) ?? nonEmptyString(entry.zh) ?? nonEmptyString(entry.name)
+    const labelEn = nonEmptyString(entry.labelEn) ?? nonEmptyString(entry.en)
+    categories.push({
+      id,
+      ...(label === undefined ? {} : { label }),
+      ...(labelEn === undefined ? {} : { labelEn }),
+      ...(typeof entry.count === 'number' && Number.isFinite(entry.count) ? { count: entry.count } : {}),
+    })
+  }
+  return categories
 }
 
 /** The validator held for `url`, when one is held at all. */

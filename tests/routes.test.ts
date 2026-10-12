@@ -172,6 +172,7 @@ describe('registered surface', () => {
       '/dsh-galaxy/channel',
       '/dsh-galaxy/region',
       '/dsh-galaxy/github-proxy',
+      '/dsh-galaxy/catalog-source',
       '/dsh-galaxy/self-uninstall',
       '/dsh-galaxy/restart',
       '/dsh-galaxy/approve-builds',
@@ -530,5 +531,58 @@ describe('host version on the wire', () => {
       disposeLocal()
       rmSync(join(home, 'profiles', 'node_modules'), { recursive: true, force: true })
     }
+  })
+})
+
+/**
+ * The catalog source is the one setting with no other entry point, and the one
+ * whose absence made a healthy panel look broken: a packaged app without it fell
+ * back to the built-in public catalog (4508 rows, no ranking, a MAP-shaped
+ * vocabulary) and showed no featured category and no category selector.
+ *
+ * Read side lives in `/status` (one registration per path), write side here.
+ * This harness sets `DSHG_REGISTRY_URL`, so the environment is reported as the
+ * winning layer — which is exactly the precedence the card has to explain.
+ */
+describe('catalog source', () => {
+  it('reports the stored values and which layer wins through /status', async () => {
+    const response = await call('/dsh-galaxy/status')
+    expect(response.status).toBe(200)
+    const body = await response.json() as { catalogUrl: string; siteUrl: string; catalogSource: string; effectiveCatalogUrl: string; envCatalog: boolean }
+    expect(body.envCatalog).toBe(true)
+    expect(body.catalogSource).toBe('env')
+    expect(body.catalogUrl).toBe('')
+    expect(body.effectiveCatalogUrl).toBe('http://127.0.0.1:1/plugins.json')
+  })
+
+  it('stores both URLs, then clears them back to the fallback', async () => {
+    const response = await call('/dsh-galaxy/catalog-source', {
+      method: 'POST',
+      body: { catalogUrl: 'https://www.yhaigc.cn/assets/plugins/catalog.json', siteUrl: 'https://www.yhaigc.cn' },
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json() as { catalogSource: string; effectiveCatalogUrl: string; siteUrl: string }
+    // The env override still wins for the catalog, but siteUrl has no override.
+    expect(body.catalogSource).toBe('env')
+    expect(body.effectiveCatalogUrl).toBe('http://127.0.0.1:1/plugins.json')
+    expect(body.siteUrl).toBe('https://www.yhaigc.cn')
+
+    const state = JSON.parse(readFileSync(join(home, 'profiles', 'web', '.dsh-galaxy', 'state.json'), 'utf8')) as { catalogUrl?: string; siteUrl?: string }
+    expect(state.catalogUrl).toBe('https://www.yhaigc.cn/assets/plugins/catalog.json')
+    expect(state.siteUrl).toBe('https://www.yhaigc.cn')
+
+    const cleared = await call('/dsh-galaxy/catalog-source', { method: 'POST', body: { catalogUrl: '', siteUrl: '' } })
+    const after = await cleared.json() as { catalogUrl: string; siteUrl: string }
+    expect(after.catalogUrl).toBe('')
+    expect(after.siteUrl).toBe('')
+  })
+
+  it('rejects a non-URL value instead of storing it', async () => {
+    for (const bad of ['not-a-url', 'file:///etc/passwd', 'javascript:alert(1)']) {
+      const response = await call('/dsh-galaxy/catalog-source', { method: 'POST', body: { catalogUrl: bad } })
+      expect(response.status, bad).toBe(400)
+    }
+    const missing = await call('/dsh-galaxy/catalog-source', { method: 'POST', body: {} })
+    expect(missing.status).toBe(400)
   })
 })

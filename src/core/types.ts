@@ -425,6 +425,13 @@ export interface Progress {
 
 /** Payload of `GET /dsh-galaxy/status`. */
 export interface GalaxyStatus {
+  /** Catalog source facts for the settings card (see `catalogSourceView`). */
+  catalogUrl?: string
+  siteUrl?: string
+  envCatalog?: boolean
+  envSite?: boolean
+  effectiveCatalogUrl?: string
+  catalogSource?: 'env' | 'profile' | 'default'
   boot: string
   version: string
   channel: Channel

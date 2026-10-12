@@ -299,3 +299,47 @@ describe('a site catalog loaded through the real loader', () => {
     }
   }, 20_000)
 })
+
+/**
+ * The public aggregate ships its category vocabulary as a MAP keyed by slug
+ * (`{ agi: { zh, en } }`) while the community site ships an ARRAY of objects.
+ * The panel's category selector and featured chip are entirely data-driven, so a
+ * dropped vocabulary means an invisible selector — which is exactly what the
+ * desktop app reported when it fell back to the default catalog.
+ */
+describe('category vocabulary shapes', () => {
+  it('normalizes the array shape the community site publishes', async () => {
+    const { normalizeCategories } = await import('../src/domain/registry.ts')
+    expect(normalizeCategories([
+      { id: 'curated', label: '甄选', labelEn: 'Featured', count: 8 },
+      { id: 'cost', label: '费用与额度' },
+      'legacy-string',
+      { id: '' },
+      null,
+    ])).toEqual([
+      { id: 'curated', label: '甄选', labelEn: 'Featured', count: 8 },
+      { id: 'cost', label: '费用与额度' },
+      { id: 'legacy-string' },
+    ])
+  })
+
+  it('normalizes the map shape the public aggregate publishes', async () => {
+    const { normalizeCategories } = await import('../src/domain/registry.ts')
+    expect(normalizeCategories({
+      agi: { en: 'AGI Architecture Exploration', zh: 'AGI 架构探索' },
+      ui: { en: 'UI Enhancements' },
+      bare: 'Bare Label',
+      broken: 7,
+    })).toEqual([
+      { id: 'agi', label: 'AGI 架构探索', labelEn: 'AGI Architecture Exploration' },
+      { id: 'ui', labelEn: 'UI Enhancements' },
+      { id: 'bare', label: 'Bare Label' },
+      { id: 'broken' },
+    ])
+  })
+
+  it('returns nothing for shapes it cannot read', async () => {
+    const { normalizeCategories } = await import('../src/domain/registry.ts')
+    for (const value of [undefined, null, 42, 'nope']) expect(normalizeCategories(value)).toEqual([])
+  })
+})

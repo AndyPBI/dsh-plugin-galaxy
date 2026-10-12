@@ -151,17 +151,42 @@ const drifted = plugins.filter(row =>
 check('every key is exactly `owner/name` (the rule the galaxy derives)', drifted.length === 0,
   drifted.length === 0 ? undefined : drifted.slice(0, 3).map(row => `${row.key} ≠ ${row.owner}/${row.name}`).join('; '))
 
+/**
+ * Normalize a catalog's category vocabulary, whichever shape it ships: the
+ * community site publishes an ARRAY of objects, the public aggregate a MAP keyed
+ * by slug. The panel accepts both (see `normalizeCategories` in the loader), so
+ * this validator must too — otherwise pointing it at the aggregate reports every
+ * row as having an undeclared category.
+ */
+function categoryList(value) {
+  const items = Array.isArray(value)
+    ? value
+    : (value !== null && typeof value === 'object'
+        ? Object.entries(value).map(([id, entry]) => (
+            entry !== null && typeof entry === 'object' ? { id, ...entry } : { id, label: entry }
+          ))
+        : [])
+  return items
+    .filter(entry => entry !== null && typeof entry === 'object'
+      && typeof entry.id === 'string' && entry.id.trim() !== '')
+    .map(entry => ({
+      ...entry,
+      id: entry.id.trim(),
+      label: entry.label ?? entry.zh ?? entry.name,
+      labelEn: entry.labelEn ?? entry.en,
+    }))
+}
 /* ---- 4. the shapes the client destructures ---- */
-check('categories[] is present and non-empty',
-  Array.isArray(parsed?.categories) && parsed.categories.length > 0,
-  `${String(Array.isArray(parsed?.categories) ? parsed.categories.length : 0)} category(ies)`)
+check('the category vocabulary is present and non-empty (array or map)',
+  categoryList(parsed?.categories).length > 0,
+  `${String(categoryList(parsed?.categories).length)} category(ies)`)
 check('counts is an object', typeof parsed?.counts === 'object' && parsed.counts !== null)
 check('counts.plugins matches the row count',
   parsed?.counts?.plugins === undefined || parsed.counts.plugins === plugins.length,
   `counts.plugins=${String(parsed?.counts?.plugins)} rows=${String(plugins.length)}`)
 
 /* ---- 5. every category resolves ---- */
-const declared = new Set((Array.isArray(parsed?.categories) ? parsed.categories : []).map(category => category?.id))
+const declared = new Set(categoryList(parsed?.categories).map(category => category.id))
 const unresolved = plugins.filter(row => typeof row?.category === 'string' && !declared.has(row.category))
 check('every row\'s category is declared in categories[]', unresolved.length === 0,
   unresolved.length === 0 ? `${String(declared.size)} declared` : unresolved.slice(0, 3).map(row => row.category).join(', '))
@@ -384,9 +409,7 @@ if (isUrl(catalogTarget)) {
     const loadedVocabulary = Array.isArray(registry.categories) ? registry.categories : []
     // Read from the payload here: section 11's list is declared further down, and a
     // forward reference inside a `const` would be a TDZ crash.
-    const payloadVocabulary = Array.isArray(parsed?.categories)
-      ? parsed.categories.filter(entry => entry !== null && typeof entry === 'object')
-      : []
+    const payloadVocabulary = categoryList(parsed?.categories)
     check('9.7  the loader keeps the category vocabulary (ids + labels)',
       loadedVocabulary.length === payloadVocabulary.length
       && payloadVocabulary.every((entry, index) => loadedVocabulary[index]?.id === entry.id
@@ -435,7 +458,7 @@ if (existsSync(siteZhFile) && existsSync(siteEnFile)) {
  * entry, a label, or a truthful count shows up as a raw slug on a card — the
  * same class of drift `displayName` had for plugin names.
  */
-const categoryEntries = Array.isArray(parsed?.categories) ? parsed.categories.filter(entry => entry !== null && typeof entry === 'object') : []
+const categoryEntries = categoryList(parsed?.categories)
 const badCategoryIds = categoryEntries.filter(entry => typeof entry.id !== 'string' || entry.id.trim() === '')
 check('11.1 every categories[] entry carries a non-empty id',
   badCategoryIds.length === 0, `${String(categoryEntries.length)} entr(ies)`)
