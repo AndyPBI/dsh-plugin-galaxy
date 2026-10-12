@@ -115,6 +115,12 @@ cd <plugin> && npm run check:host-surface && npm run check:host-settings && npm 
    跳过 CLI 的 `plugin --profile` 包装（它无法指向非标准目录）。
 3. 打包应用下 `allowRestart` 强制 `false`，与旧桌面分支同一条理由：生命周期归外壳。
 
+**桌面壳还会剥掉 `Origin`**（2026-10 踩到的坑）：页面 origin 是 `dsh-app://app`，壳把应用请求转发给宿主时
+删除 `origin`/`host`/`cookie`/`sec-fetch-site` 并注入宿主自己的认证 cookie（`apps/desktop/src/web-document.ts`）。
+宿主自己的 API 靠 cookie 认证，不受影响；而本插件的写路由要求同源 → 桌面版**只读正常、写操作全部 403 `untrusted origin`**。
+修法（0.1.37）：`sameOrigin()` 在**回环**前提下额外接受"无 Origin"与 `dsh-app://` 两种形态，见
+`docs/implementation-contract.md` 的判定说明。该问题与操作系统无关（macOS 桌面版同样会中），也与网络无关。
+
 Windows 侧另有既有实现（非本次新增，均有注释与门禁）：`dsh.cmd` 必须经 shell 启动、
 `taskkill /t /f` 杀进程树、PATH 分隔符、`ComSpec`、`windowsHide`；本次补的两处：
 

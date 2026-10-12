@@ -158,7 +158,12 @@ export function capabilitiesV1(runtime: GalaxyRuntime, endpoints: string[]): Cap
 
 ## 6. HTTP 契约要点（来自 interface-index）
 
-- **写路由**一律 `router.post(...)`（自动 sameOrigin 校验）。
+- **写路由**一律 `router.post(...)`（自动 sameOrigin 校验）。判定见 `core/http.ts` 的 `sameOrigin()`：
+  ① `Origin` 与 `Host` 一致（浏览器形态）；② **无 `Origin` 且请求来自回环** —— 打包桌面壳转发请求时会删除
+  `origin`/`host`/`cookie`/`sec-fetch-site` 并注入宿主 cookie（`apps/desktop/src/web-document.ts` → `forwardWebRequest`），
+  所以桌面 UI 的写操作是"裸请求"，旧规则一律 403（面板能看不能装）；③ `Origin` 为 `dsh-app://` 协议且来自回环。
+  ②③ 都**额外要求回环**，远程调用方伪造"无 Origin"也过不去；浏览器在跨源 POST 上必然带 `Origin`，
+  因此"缺失"本身即有信号意义。`Origin: null`（沙箱 iframe / `file://`）属"存在但不可解析"，仍拒绝。
 - **破坏性路由**（`/restart`、`/self-uninstall`、`/backup`）额外要求 loopback：
   `/restart`、`/self-uninstall` 用 `{ loopback: true, sameOrigin: true }`；
   `/backup` 用 `{ loopback: true }`（`<a download>` 不带 Origin）。

@@ -49,13 +49,43 @@ export function sendAttachment(
   response.end(body)
 }
 
-/** True when the request's Origin matches its Host — required on every POST route. */
+/**
+ * Whether a mutating request may proceed.
+ *
+ * The guard defends the loopback routes against CSRF from an arbitrary web page,
+ * and browsers attach `Origin` to every cross-origin POST — so a *matching*
+ * origin is the ordinary browser case, and its absence is itself meaningful.
+ *
+ * The packaged desktop shell needs the two extra cases: it loads the UI from
+ * `dsh-app://app` and forwards application requests to the host with
+ * `host`/`origin`/`cookie`/`sec-fetch-site` **deleted** and its own authenticated
+ * cookie injected (`apps/desktop/src/web-document.ts` → `forwardWebRequest`).
+ * Every mutation from the desktop UI therefore arrives with no `Origin` at all,
+ * which the old rule rejected — the panel could list plugins but not install,
+ * update, uninstall or toggle any of them (#2026-10).
+ *
+ * Both extra cases require the socket to be loopback, so a remote caller cannot
+ * reach them by omitting or spoofing the header, and destructive routes still
+ * require loopback on top. `Origin: null` (sandboxed frame, `file://`) is a
+ * present-but-unparseable value and stays untrusted.
+ *
+ * @param request - Incoming request to judge.
+ * @returns true when the caller is same-origin, or the owned desktop shell on loopback.
+ */
 export function sameOrigin(request: IncomingMessage): boolean {
   const origin = request.headers.origin
   const host = request.headers.host
-  if (origin === undefined || host === undefined) return false
+  if (origin === undefined) {
+    // No Origin: the desktop shell strips it; anything else that omits it must
+    // at least be on this machine.
+    return loopbackRequest(request)
+  }
+  if (host === undefined) return false
   try {
-    return new URL(origin).host === host
+    const parsed = new URL(origin)
+    if (parsed.host === host) return true
+    // An older/other shell path may forward the app origin verbatim.
+    return parsed.protocol === 'dsh-app:' && loopbackRequest(request) && host !== ''
   } catch {
     return false
   }

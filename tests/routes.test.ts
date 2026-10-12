@@ -586,3 +586,43 @@ describe('catalog source', () => {
     expect(missing.status).toBe(400)
   })
 })
+
+/**
+ * The desktop shell forwards application requests with `origin`/`host` deleted and
+ * its own cookie injected (`apps/desktop/src/web-document.ts`), so a mutation from
+ * the desktop UI arrives bare. This is the regression that made the panel able to
+ * list plugins but not install one inside the desktop app.
+ */
+describe('mutations from the desktop shell', () => {
+  it('accepts a POST with no Origin from loopback', async () => {
+    const response = await call('/dsh-galaxy/note', {
+      method: 'POST',
+      origin: null,
+      body: { name: 'desktop-shape', text: 'bare request' },
+    })
+    expect(response.status).toBe(200)
+    const state = JSON.parse(readFileSync(join(home, 'profiles', 'web', '.dsh-galaxy', 'state.json'), 'utf8')) as {
+      notes?: Record<string, string>
+    }
+    expect(state.notes?.['desktop-shape']).toBe('bare request')
+  })
+
+  it('still refuses a bare POST from a non-loopback socket', async () => {
+    const response = await call('/dsh-galaxy/note', {
+      method: 'POST',
+      origin: null,
+      remoteAddress: '10.0.0.5',
+      body: { name: 'remote', text: 'should not land' },
+    })
+    expect(response.status).toBe(403)
+  })
+
+  it('still refuses a mismatched Origin', async () => {
+    const response = await call('/dsh-galaxy/note', {
+      method: 'POST',
+      origin: 'https://evil.example',
+      body: { name: 'evil', text: 'should not land' },
+    })
+    expect(response.status).toBe(403)
+  })
+})
