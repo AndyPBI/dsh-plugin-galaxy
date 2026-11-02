@@ -41,6 +41,7 @@
     "catalog:fetch": "node scripts/fetch-opc-catalog.mjs",
     "catalog:fetch:verify": "node scripts/fetch-opc-catalog.mjs --verify",
     "catalog:discover": "node scripts/discover-dsh-plugins.mjs",
+    "catalog:curated": "node scripts/update-curated-plugins.mjs",
     "catalog:update": "node scripts/update-galaxy-catalog.mjs",
     "catalog:update:dry": "node scripts/update-galaxy-catalog.mjs --dry-run",
     "catalog:update:nogithub": "node scripts/update-galaxy-catalog.mjs --no-github",

@@ -25,9 +25,10 @@
  *   node scripts/update-galaxy-catalog.mjs --offline --skip-fetch   # no network at all
  *   node scripts/update-galaxy-catalog.mjs --top 30        # raise the per-category cap
  *   node scripts/update-galaxy-catalog.mjs --from rank     # resume mid-way
+ *   node scripts/update-galaxy-catalog.mjs --force         # re-download clones + curated dirs
  *
  * Flags: --dry-run --offline --no-github --skip-fetch --skip-translate
- *        --skip-gates --from <step> --top <n>
+ *        --skip-gates --from <step> --top <n> --force
  * Env:   OPC_CATALOG_DIR  PBI_FRONTEND_DIR  GITHUB_TOKEN  DSHG_NO_GITHUB=1
  */
 
@@ -56,6 +57,8 @@ const offline = flag('--offline')
 const skipFetch = flag('--skip-fetch') || offline
 const skipTranslate = flag('--skip-translate')
 const skipGates = flag('--skip-gates')
+// 全量刷新：已克隆的上游仓库重拉，已列入清单的甄选目录也重下（默认只跟版本）。
+const force = flag('--force')
 const fromStep = arg('--from', null)
 /**
  * Turn off the GitHub discovery channel. Restricted networks cannot reach
@@ -220,11 +223,24 @@ const STEPS = [
     async run() {
       const args = ['scripts/fetch-opc-catalog.mjs', '--catalog-dir', catalogDir]
       if (offline) args.push('--offline')
+      if (force) args.push('--force')
       // Keep the leaderboard's plugins on their current release. The ranking is
       // read from the PREVIOUS run's artifact, which is the right window: it is
       // the leaderboard visitors are actually looking at.
       const ranking = join(frontendDir, 'public/assets/plugins/ranking.json')
       if (existsSync(ranking)) args.push('--refresh-ranked', ranking)
+      await sh(process.execPath, args)
+    },
+  },
+  {
+    id: 'curated',
+    title: '甄选（best-plugin 跟随 GitHub 最新版）',
+    async run() {
+      // 甄选目录是手工下载的 ZIP（没有 .git），fetch 的 clone 逻辑碰不到它们。
+      // 这一步按 sources.json 逐个比对 GitHub 上的 package.json 版本，落后才覆盖；
+      // 不决定「谁进甄选」——名单仍然只由 sources.json 决定。
+      const args = ['scripts/update-curated-plugins.mjs', '--catalog-dir', catalogDir]
+      if (force) args.push('--force')
       await sh(process.execPath, args)
     },
   },
@@ -331,7 +347,9 @@ async function main() {
   const previousState = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : null
   const enabled = STEPS.filter(step => {
     if (fromStep && STEPS.findIndex(s => s.id === fromStep) > STEPS.findIndex(s => s.id === step.id)) return false
-    if (skipFetch && step.id === 'fetch') return false
+    // curated 也是网络+落盘步骤（重新下载 best-plugin 目录），跳过抓取时一并跳过：
+    // 用户说「只更新列表」时不该被一个下载动作拖住。
+    if (skipFetch && ['fetch', 'curated'].includes(step.id)) return false
     // `converge` drives its own translate+build rounds, so skipping translation
     // must skip it too rather than leaving it to spin on unchanged data.
     if (skipTranslate && ['translate', 'rebuild', 'converge'].includes(step.id)) return false

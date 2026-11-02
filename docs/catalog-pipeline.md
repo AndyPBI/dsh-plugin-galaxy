@@ -21,17 +21,19 @@
                                                     MANIFEST.tsv / download_report.json
                ──────────  non-MIT 到此为止，永不进官网  ──────────
 
-[4] build      (PBISimulation-Frontend) 仅取 MIT/ → public/assets/plugins/catalog.json
+[4] curated    best-plugin/ 对照 GitHub 版本       → 落后的目录就地更新（见 3.1e）
 
-[5] translate  (前端) DeepSeek 增量翻译            → scripts/.cache/desc-zh.json
+[5] build      (PBISimulation-Frontend) 仅取 MIT/ → public/assets/plugins/catalog.json
 
-[6] rebuild    (前端) 再 build 一次，并入译文
+[6] translate  (前端) DeepSeek 增量翻译            → scripts/.cache/desc-zh.json
 
-[7] converge   (前端) 循环 translate+build，直到 descEn 覆盖不再提升（见 3.1c）
+[7] rebuild    (前端) 再 build 一次，并入译文
 
-[8] rank       (前端) 打分并回写 score/band        → catalog.json + ranking.json
+[8] converge   (前端) 循环 translate+build，直到 descEn 覆盖不再提升（见 3.1c）
 
-[9] gate       产物测试 + check:site-catalog
+[9] rank       (前端) 打分并回写 score/band        → catalog.json + ranking.json
+
+[10] gate      产物测试 + check:site-catalog
 
 ── 停 ──  部署需人工确认（编排器不做）
 ```
@@ -47,6 +49,7 @@
 | `scripts/discover-dsh-plugins.mjs` | 抓上游聚合源 + GitHub 搜索，产出生成器输入 | 需要 |
 | `scripts/build-opc-catalog.mjs` | 关键词分类、每类上限、产出四种报告 | 否（只读本地） |
 | `scripts/fetch-opc-catalog.mjs` | 逐仓库 clone、判定 license、刷新排行榜插件的版本 | 需要（API + git + npm） |
+| `scripts/update-curated-plugins.mjs` | 对照 GitHub 版本，更新 `best-plugin/` 下已列入清单的目录 | 需要（raw + git） |
 | `scripts/update-galaxy-catalog.mjs` | 编排以上 + 前端四步 + 门禁 | 取决于参数 |
 
 前端（`PBISimulation-Frontend/scripts/`）：`build-plugin-catalog.mjs`、`translate-catalog.mjs`、`build-plugin-ranking.mjs`。
@@ -111,6 +114,29 @@ pass 2 一旦写入中文译文 `zhFull`，`descFull` 就从「原文」翻成�
   不受当前排序项影响。
 
 `best-plugin/` 目录本身与 `opc-catalog/` 一样**不进仓库**；只有派生的 `catalog.json` 会发布。
+
+### 3.1e 甄选目录跟版本：curated 步骤
+
+3.1d 的“人工维护”指**成员名单**，不指内容版本。目录是从 GitHub 下载的 ZIP，没有
+`.git`，`fetch` 的 clone 逻辑碰不到它们；不额外处理的话，sources.json 里的仓库会永远
+停在下载当天的版本。
+
+`curated` 步骤（`scripts/update-curated-plugins.mjs`）在 `fetch` 之后、`build` 之前运行：
+
+- 逐个读 `<repo>/<branch>/package.json`（`raw.githubusercontent.com`），与本地
+  `package.json` 的 `version` 用 `compareVersions()` 比较。**只有远端严格更新才覆盖**；
+  本地更新（如未发布的开发版）保持原样，避免降级。版本相同则跳过。
+- 本地目录缺失但已列入清单 → 直接下载。所以“加入甄选”= 写一条 sources.json，
+  再跑一次 update。
+- 分支从目录名后缀推断（`-main` / `-master`），值里带 `/tree/<branch>/<subpath>`
+  时以值为准，并从 subpath 取内容。
+- 下载用浅克隆到 `best-plugin/.staging-*`，再原子 rename 替换：克隆或换入失败会恢复
+  原目录，不会留下半新半旧的状态。`--force` 无条件重下。
+- 网络失败（单个仓库读不到/克隆失败）**不阻塞管线**：聚合源照常可用，甄选保持上一版，
+  末尾列出未完成的条目。`--skip-fetch` / `--offline` 会跳过本步骤。
+- **同一仓库不能同时出现在甄选与上游**：前端 build 会因 `owner/name` 重复直接失败。
+  该步骤在下载前检测并给出可操作的错误（删 sources.json 条目，或从上游排除）。
+  实测踩过：`Dely0/dsh-personal-workbench` 已在上游目录，再加进甄选会被拦下。
 
 ### 3.2 license 判定看目录，不看 package.json
 
