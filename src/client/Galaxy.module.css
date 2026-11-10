@@ -71,6 +71,13 @@
  * separate hint nobody associates with the dropdown. It collapses with the rest of
  * the label at the dialog's narrow width (the select keeps its aria-label). */
 .sortScope{font-size:11px;font-weight:400}
+/* Narrow panels collapse the 「排序」 text label to keep the control row on one
+ * line; the scope explanation then moves to its own line rather than vanishing.
+ * The query resolves against `.root` (the nearest container for this sibling). */
+.sortScopeNarrow{display:none;font-size:11px;line-height:16px;margin:0}
+@container (max-width:430px){
+  .sortScopeNarrow{display:block}
+}
 /* The featured category shortcut uses a PILL, not the status-tab underline: it is
  * a category control, and must not look like a sixth mutually-exclusive status. */
 .categoryQuick{border:1px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));background:transparent;color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));font:inherit;font-size:12px;line-height:18px;padding:3px 10px;border-radius:999px;cursor:pointer;white-space:nowrap;flex:0 0 auto}

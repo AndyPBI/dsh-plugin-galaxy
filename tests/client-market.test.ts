@@ -460,6 +460,9 @@ describe('Discover — filter feedback', () => {
     const host = await mount()
     await flush()
     expect(host.textContent).toContain('Sort (in current results)')
+    // The narrow-width fallback keeps the explanation in the DOM when the
+    // control label collapses (CSS decides when it is visible).
+    expect(host.textContent).toContain('Sorting applies to the current results only')
   })
 })
 

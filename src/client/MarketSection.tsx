@@ -843,6 +843,12 @@ function Toolbar(props: {
         </span>
       )}
       </div>
+      {sort !== undefined && onSort !== undefined && (
+        // At the host dialog's narrow width the 「排序（当前结果内）」 label is
+        // collapsed to keep the row from overflowing; this fallback line keeps
+        // the scope visible there instead of silently dropping the explanation.
+        <p className={`${css.muted} ${css.sortScopeNarrow}`}>{t('sortScopeHintLong')}</p>
+      )}
     </div>
   )
 }
