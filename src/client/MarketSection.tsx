@@ -130,6 +130,18 @@ const DISCOVER_PAGE_SIZE = 60
 const RECOMMEND_WINDOW = 20
 
 /**
+ * How long the search box settles before the listing is recomputed.
+ *
+ * The chip row and the category selector apply immediately — they are single
+ * deliberate clicks and the filter is local, so a debounce there would only add
+ * lag. A search box is different: every keystroke is an intermediate state, and
+ * re-running the haystack over the whole catalog for each one is what made the
+ * grid flicker while typing. The input itself stays immediate; the listing (and
+ * its count) follows this delay, with 「筛选中…」 shown in between.
+ */
+const SEARCH_DEBOUNCE_MS = 180
+
+/**
  * How long a mutation may run before the panel stops being quietly busy and
  * offers the operator a way out.
  *
@@ -160,6 +172,24 @@ class MutationAbandoned extends Error {
     super(`mutation abandoned: ${reason}`)
     this.name = 'MutationAbandoned'
   }
+}
+
+/**
+ * The value after it has stopped changing for `delayMs`.
+ *
+ * Used for the search term only (see `SEARCH_DEBOUNCE_MS`): the input renders
+ * the live value, while the listing reads the settled one. Keeping the debounce
+ * in the listing rather than in the input means typing is never laggy and the
+ * "pending" state is explicit (`live !== settled`), so the panel can say it is
+ * still filtering instead of silently showing stale results.
+ */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => { setSettled(value) }, delayMs)
+    return () => { clearTimeout(timer) }
+  }, [value, delayMs])
+  return settled
 }
 
 type SortField = 'name' | 'stars' | 'downloads' | 'added'
@@ -252,6 +282,21 @@ function tabFromPreferred(preferred: string | undefined): GalaxyTab | null {
   if (typeof preferred !== 'string') return null
   const head = preferred.trim().replace(/^ENTRY-/i, '').split(':')[0]!.trim().toLowerCase()
   return TAB_IDS.find(id => id === head) ?? null
+}
+
+/**
+ * The label of one STATUS filter entry.
+ *
+ * The 「未安装」 entry is called 「推荐」 only when the catalog actually ships a
+ * ranking; without one it lists every not-installed plugin, and a chip called
+ * 「推荐」 would be a lie. This is the one place that rule is applied, so the
+ * chip row, the active-filter chips and the empty-state explanation cannot
+ * disagree about what the current status is called.
+ */
+function statusFilterLabel(filter: DiscoverFilter, recommended: boolean, t: Translate): string {
+  const entry = FILTERS.find(candidate => candidate.id === filter)
+  if (entry === undefined) return t('filterAll')
+  return t('fallbackLabel' in entry && !recommended ? entry.fallbackLabel : entry.label)
 }
 
 /** Search term carried after an `id:query` colon, when the host sends one. */
@@ -559,8 +604,88 @@ function isFavorited(
  * ------------------------------------------------------------------ */
 
 /**
- * Search + filter + sort + reload strip shared by the Discover, Installed and
- * Favorites tabs. A tab passes only the controls it owns.
+ * The filters that are currently stacked, and how to remove each one.
+ *
+ * The status chips and the category selector are two independent filters that
+ * AND together, but the controls alone do not show the COMBINATION: after
+ * selecting 甄选 in the selector and switching the status, the only visible
+ * state was whichever chip happened to be active. This strip names every
+ * condition in force and gives each an explicit "remove", including one action
+ * that clears them all — so "why do I see no results?" is answerable without
+ * reopening each control.
+ */
+function ActiveFilterBar(props: {
+  t: Translate
+  /** Undefined when the default status (「全部」) is active. */
+  statusLabel?: string
+  /** Undefined when no category is selected. */
+  categoryLabel?: string
+  /** The settled search term, or '' when the box is empty. */
+  query: string
+  onClearStatus: () => void
+  onClearCategory: () => void
+  onClearSearch: () => void
+  onClearAll: () => void
+}) {
+  const chips: Array<{ key: string; label: string; clearLabel: string; clear: () => void }> = []
+  if (props.statusLabel !== undefined) {
+    chips.push({
+      key: 'status',
+      label: props.t('activeStatusChip', { label: props.statusLabel }),
+      clearLabel: props.t('clearStatusFilter'),
+      clear: props.onClearStatus,
+    })
+  }
+  if (props.categoryLabel !== undefined) {
+    chips.push({
+      key: 'category',
+      label: props.t('activeCategoryChip', { label: props.categoryLabel }),
+      clearLabel: props.t('clearCategoryFilter'),
+      clear: props.onClearCategory,
+    })
+  }
+  if (props.query !== '') {
+    chips.push({
+      key: 'query',
+      label: props.t('activeSearchChip', { query: props.query }),
+      clearLabel: props.t('clearSearch'),
+      clear: props.onClearSearch,
+    })
+  }
+  if (chips.length === 0) return null
+  return (
+    <div className={css.activeFilters} role="group" aria-label={props.t('activeFiltersLabel')}>
+      <span className={css.muted}>{props.t('activeFiltersCount', { count: chips.length })}</span>
+      {chips.map(chip => (
+        <span key={chip.key} className={css.filterChip}>
+          <span className={css.filterChipLabel}>{chip.label}</span>
+          <button
+            type="button"
+            className={css.filterChipClear}
+            aria-label={props.t('removeFilter', { label: chip.label })}
+            title={chip.clearLabel}
+            onClick={chip.clear}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <button type="button" className={css.clearAllFilters} onClick={props.onClearAll}>
+        {props.t('clearAllFilters')}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Search + status + category + sort + reload strip for the Discover surface.
+ *
+ * The status chips and the category controls are deliberately SEPARATE rows:
+ * status is the primary filter (which set of plugins is being listed) and the
+ * category is a secondary filter applied INSIDE that set. They combine with
+ * AND, and neither resets or owns the other. The previous version promoted the
+ * featured category into the status chip row, which made a category selection
+ * look like a status and let a status switch silently change the category.
  */
 function Toolbar(props: {
   t: Translate
@@ -573,6 +698,8 @@ function Toolbar(props: {
   onFilter?: (value: DiscoverFilter) => void
   /** True when the catalog ships a `ranking` block: 「未安装」 then reads 「推荐」. */
   recommended?: boolean
+  /** True while 「推荐」 renders the published ranking: the order is fixed. */
+  rankingView?: boolean
   sort?: SortKey
   onSort?: (value: SortKey) => void
   /** Selected category slug; `''` = all categories. */
@@ -580,7 +707,7 @@ function Toolbar(props: {
   onCategory?: (value: string) => void
   /** The catalog's vocabulary, in the order the site publishes it. */
   categories?: readonly RegistryCategory[]
-  /** Rows per category slug, counted over the whole catalog. */
+  /** Rows per category slug, counted over the CURRENT status + search set. */
   categoryCounts?: ReadonlyMap<string, number>
   /** Whether the English labels apply to the category options. */
   english?: boolean
@@ -589,10 +716,11 @@ function Toolbar(props: {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
   /*
    * The site's own front page lists every category as a chip with 「甄选」 pinned
-   * first, so the panel promotes the FIRST published category to a chip right
-   * after 「全部」: the featured category is then visible without opening a
-   * selector, and the site can move the promotion by reordering its vocabulary.
-   * The selector still reaches the whole vocabulary.
+   * first. It is a convenience shortcut for the CATEGORY filter — so it lives in
+   * the category controls, not in the status chip row: putting it beside 「全部」
+   * made a category look like a mutually-exclusive status, which is exactly the
+   * coupling this surface is fixing. The selector still reaches the whole
+   * vocabulary; this shortcut only saves opening it.
    */
   const featured = categories?.[0]
   const selectedCategoryLabel = category === undefined || category === ''
@@ -621,38 +749,14 @@ function Toolbar(props: {
           icon={<IconRefresh size={13} />}
           onClick={onReload}
           disabled={busy}
-          title={busy ? t('busyWait') : t('reload')}
+          title={busy ? t('reloadBusy') : t('reload')}
         >
-          {t('reload')}
+          {busy ? t('reloadBusy') : t('reload')}
         </Button>
       </div>
       {filter !== undefined && onFilter !== undefined && (
-        <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('filterLabel')}>
-          {FILTERS.slice(0, 1).map(entry => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-pressed={filter === entry.id && (category === undefined || category === '')}
-              className={chip(filter === entry.id && (category === undefined || category === ''))}
-              onClick={() => {
-                onCategory?.('')
-                onFilter(entry.id)
-              }}
-            >
-              {t(entry.label)}
-            </button>
-          ))}
-          {featured !== undefined && onCategory !== undefined && category !== undefined && (
-            <button
-              type="button"
-              aria-pressed={category === featured.id}
-              className={chip(category === featured.id)}
-              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
-            >
-              {categoryEntryLabel(featured, props.english === true)}
-            </button>
-          )}
-          {FILTERS.slice(1).map(entry => (
+        <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('statusFilterLabel')}>
+          {FILTERS.map(entry => (
             <button
               key={entry.id}
               type="button"
@@ -686,7 +790,10 @@ function Toolbar(props: {
             <option value=''>{t('allCategories')}</option>
             {categories.map(entry => {
               const label = categoryEntryLabel(entry, props.english === true)
-              const count = categoryCounts?.get(entry.id)
+              // The count is scoped to the current status + search set, and an
+              // explicit (0) is the point: it tells the user before they pick a
+              // category that THIS combination will be empty.
+              const count = categoryCounts === undefined ? undefined : (categoryCounts.get(entry.id) ?? 0)
               return (
                 <option key={entry.id} value={entry.id}>
                   {count === undefined ? label : `${label} (${String(count)})`}
@@ -696,13 +803,28 @@ function Toolbar(props: {
           </select>
         </label>
       )}
+      {featured !== undefined && category !== undefined && onCategory !== undefined && (
+        <button
+          type="button"
+          className={category === featured.id ? `${css.categoryQuick} ${css.categoryQuickActive}` : css.categoryQuick}
+          aria-pressed={category === featured.id}
+          aria-label={t('categoryQuickAria', { label: categoryEntryLabel(featured, props.english === true) })}
+          title={t('categoryQuickHint', { label: categoryEntryLabel(featured, props.english === true) })}
+          onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
+        >
+          {categoryEntryLabel(featured, props.english === true)}
+        </button>
+      )}
       {sort !== undefined && onSort !== undefined && (
         <label className={`${css.row} ${css.controlsFixed}`}>
-          <span className={css.muted}>{t('sortLabel')}</span>
+          <span className={css.muted} title={t('sortScopeHint')}>
+            {t('sortLabel')}<span className={css.sortScope}>{t('sortScopeHint')}</span>
+          </span>
           <select
             className={css.select}
             value={sort}
             aria-label={t('sortLabel')}
+            title={t('sortScopeHint')}
             onChange={event => onSort(event.target.value as SortKey)}
           >
             {SORTS.map(entry => (
@@ -712,6 +834,13 @@ function Toolbar(props: {
             ))}
           </select>
         </label>
+      )}
+      {props.rankingView === true && (
+        // The sort control is absent here because the order IS the published
+        // rank; saying so is better than leaving an unexplained gap.
+        <span className={`${css.muted} ${css.rankingHint}`} title={t('rankingOrderHint')}>
+          {t('rankingOrderHint')}
+        </span>
       )}
       </div>
     </div>
@@ -1376,6 +1505,15 @@ export function MarketSection(props: {
     return preferred === 'installed' ? 'discover' : (preferred ?? 'discover')
   })
   const [discoverQuery, setDiscoverQuery] = useState('')
+  /**
+   * The settled search term the listing is computed from.
+   *
+   * The input keeps rendering `discoverQuery` so typing is immediate; the
+   * listing waits `SEARCH_DEBOUNCE_MS` so it is recomputed once per pause
+   * instead of once per keystroke, and the difference is the 「筛选中…」 state.
+   */
+  const activeQuery = useDebouncedValue(discoverQuery, SEARCH_DEBOUNCE_MS)
+  const searchPending = discoverQuery !== activeQuery
   const [favoritesQuery, setFavoritesQuery] = useState('')
   const [filter, setFilter] = useState<DiscoverFilter>(
     () => (tabFromPreferred(props.preferredSubsectionId) === 'installed' ? 'installed' : 'all'),
@@ -1393,6 +1531,15 @@ export function MarketSection(props: {
   const [inventoryError, setInventoryError] = useState<string | null>(null)
   const [updates, setUpdates] = useState<Record<string, UpdateStatus>>({})
   const [compatibility, setCompatibility] = useState<Record<string, HostCompatibility>>({})
+  /**
+   * True while the batched verdict request is outstanding.
+   *
+   * The 「不兼容」 status cannot compute its set before the verdicts arrive, so a
+   * blank grid there is ambiguous: "none" and "not checked yet" looked the
+   * same. This drives the explicit 「兼容性检查中…」 state, and the count line's
+   * busy marker for the other statuses.
+   */
+  const [compatibilityLoading, setCompatibilityLoading] = useState(false)
   const [status, setStatus] = useState<GalaxyStatus | null>(null)
   const [records, setRecords] = useState<OperationRecord[]>([])
   const [serverBusy, setServerBusy] = useState(false)
@@ -1796,9 +1943,31 @@ export function MarketSection(props: {
 
   const favoriteSet = useMemo(() => new Set<string>(inventory?.favorites ?? []), [inventory])
 
-  const discoverRows = useMemo<DiscoverRow[]>(() => {
+  /**
+   * True while 「推荐」 renders the website's published ranking.
+   *
+   * That view's order IS `ranking.top`, so the sort control has nothing to act
+   * on there. The other statuses keep it.
+   */
+  const recommendationAvailable = registry?.ranking !== undefined
+  const rankingView = filter === 'not-installed' && recommendationAvailable
+
+  /**
+   * Rows of the ACTIVE STATUS filter, before search and category.
+   *
+   * Status is the primary (mutually exclusive) filter; search and category are
+   * secondary filters applied on top of this set with AND. Keeping the primary
+   * set separate is what makes the boundary honest: a category never changes
+   * which status is active, and switching status never clears the category —
+   * it re-applies the same category inside the new set.
+   *
+   * 「推荐」 is special: its primary set is the published ranking window (the
+   * first N not-installed ranked entries). Search and category then filter
+   * WITHIN those N; they must not reach deeper into the ranking and pull in a
+   * row the primary set does not contain, which is what the old mixed memo did.
+   */
+  const statusRows = useMemo<DiscoverRow[]>(() => {
     const entries = registry?.plugins ?? []
-    const query = discoverQuery.trim().toLowerCase()
     const rows: DiscoverRow[] = []
 
     /** Append one row, deriving its unique key and its installed match. */
@@ -1833,8 +2002,6 @@ export function MarketSection(props: {
       // authors sharing a display name — while silently omitting the rest.
       // The installed set is the ground truth for "installed".
       for (const [index, installed] of (inventory?.installed ?? []).entries()) {
-        const haystack = `${installed.name} ${installed.spec} ${installed.repo ?? ''}`.toLowerCase()
-        if (query !== '' && !haystack.includes(query)) continue
         const repo = typeof installed.repo === 'string' ? installed.repo.toLowerCase() : undefined
         const entry = catalogByPackage.get(installed.name)
           ?? (repo === undefined ? undefined : catalogByRepo.get(repo))
@@ -1865,26 +2032,15 @@ export function MarketSection(props: {
         if (plugin === undefined) continue
         const installed = matchInstalled(plugin, installedByName, installedByRepo)
         if (installed !== undefined) continue
-        // 搜索同时认展示名与原始名：官网「archify integrations」，原始「archify#integrations/…」
-        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', categoryText(plugin.category, registry?.categories, english) ?? '', plugin.description ?? '', plugin.owner ?? '']
-          .join(' ')
-          .toLowerCase()
-        // 名次在搜索之前就定下来：搜过的视图里仍是它真实的名次，而不是"第 1 个匹配"。
+        // 名次在二次过滤之前就定下来：装掉的会补位并重新编号（仍是 1、2、3…），
+        // 而分类/搜索是在这个窗口内再筛，不会改变留下的行的名次。
         rank += 1
-        if (!inCategory(plugin, category)) continue
-        if (query !== '' && !haystack.includes(query)) continue
         push(plugin, rank, true, installed, rank)
         shown += 1
       }
     } else {
       for (const [index, plugin] of entries.entries()) {
         const installed = matchInstalled(plugin, installedByName, installedByRepo)
-        const identity = typeof plugin.npm === 'string' && plugin.npm !== '' ? plugin.npm : plugin.name
-        const haystack = [displayLabelOf(plugin), plugin.name, plugin.npm ?? '', plugin.category ?? '', categoryText(plugin.category, registry?.categories, english) ?? '', plugin.description ?? '', plugin.owner ?? '']
-          .join(' ')
-          .toLowerCase()
-        if (!inCategory(plugin, category)) continue
-        if (query !== '' && !haystack.includes(query)) continue
         if (filter === 'not-installed' && installed !== undefined) continue
         if (filter === 'update-available' && updates[installed?.name ?? '']?.updateAvailable !== true) continue
         // The compatibility verdict is NOT applied here: it arrives
@@ -1893,7 +2049,82 @@ export function MarketSection(props: {
         push(plugin, index, true, installed)
       }
     }
+    return rows
+  }, [
+    registry, inventory, installedByName, installedByRepo, catalogByPackage, catalogByRepo,
+    updates, compatibility, filter,
+  ])
 
+  /**
+   * The primary set narrowed by the settled search term, still BEFORE category.
+   *
+   * The category option counts are computed from this set after the asynchronous
+   * verdict filter, so "甄选 (3)" means "3 in the current status/search", not
+   * "3 in the whole catalog" — selecting it shows three rows rather than
+   * contradicting the number.
+   */
+  const searchRows = useMemo<DiscoverRow[]>(() => {
+    const query = activeQuery.trim().toLowerCase()
+    if (query === '') return statusRows
+    return statusRows.filter(row => {
+      const plugin = row.plugin
+      const haystack = [
+        displayLabelOf(plugin), plugin.name, plugin.npm ?? '',
+        plugin.category ?? '',
+        categoryText(plugin.category, registry?.categories, english) ?? '',
+        plugin.description ?? '', plugin.owner ?? '',
+        // Installed rows may be absent from the catalog; the inventory's own
+        // identity fields still have to be searchable.
+        row.installed?.name ?? '', row.installed?.spec ?? '', row.installed?.repo ?? '',
+      ].join(' ').toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [statusRows, activeQuery, registry, english])
+
+  /**
+   * Rows after status + search and, for 「不兼容」, after the asynchronous
+   * verdict — but BEFORE the category. This is the set the category counts
+   * describe: "甄选 (3)" means three rows of the current status/search, and the
+   * verdict-filtered status counts only the rows that status can actually show.
+   */
+  const verdictRows = useMemo<DiscoverRow[]>(
+    () => (filter === 'incompatible'
+      ? searchRows.filter(row => row.compatibility?.status === 'incompatible')
+      : searchRows),
+    [searchRows, filter],
+  )
+
+  /** Rows per category slug within the current status + search (+ verdict) set. */
+  const countsByCategory = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of verdictRows) {
+      for (const part of (row.plugin.category ?? '').split(',')) {
+        const slug = part.trim()
+        if (slug !== '') counts.set(slug, (counts.get(slug) ?? 0) + 1)
+      }
+    }
+    return counts
+  }, [verdictRows])
+
+  /** The secondary category filter, applied INSIDE the status/search set (AND). */
+  const categoryRows = useMemo(
+    () => (category === '' ? verdictRows : verdictRows.filter(row => inCategory(row.plugin, category))),
+    [verdictRows, category],
+  )
+
+  /**
+   * The listing in display order.
+   *
+   * The ranking view keeps the published order (re-sorting would scramble the
+   * ranks it prints); every other status sorts by the selected key, within the
+   * current filtered set — never the whole catalog.
+   */
+  const orderedRows = useMemo<DiscoverRow[]>(() => {
+    const rows = [...categoryRows]
+    if (!rankingView) {
+      const { field, dir } = parseSortKey(sort)
+      rows.sort((left, right) => compareRows(left, right, field, dir))
+    }
     // Flag names that repeat inside THIS listing: those cards must show their
     // owner, because two rows called `dsh-knowledge` are different plugins.
     const counts = new Map<string, number>()
@@ -1902,69 +2133,24 @@ export function MarketSection(props: {
       counts.set(label, (counts.get(label) ?? 0) + 1)
     }
     for (const row of rows) row.duplicateName = (counts.get(row.plugin.name) ?? 0) > 1
-
-    // 推荐榜的名次**就是**目录给的顺序：再按"名称/星数"排一次会把名次打乱
-    // （实测未安装视图变成 one/three/two）。排序只在普通列表里生效。
-    if (!(filter === 'not-installed' && registry?.ranking !== undefined)) {
-      const { field, dir } = parseSortKey(sort)
-      rows.sort((left, right) => compareRows(left, right, field, dir))
-    }
     return rows
-  }, [
-    registry, inventory, installedByName, installedByRepo, catalogByPackage, catalogByRepo,
-    updates, compatibility, discoverQuery, filter, sort, category,
-  ])
+  }, [categoryRows, rankingView, sort])
 
-  /**
-   * Candidates after the synchronous filters, before the verdict filter.
-   *
-   * The compatibility verdict is applied on top of this set once it arrives, so
-   * the request below can ask about exactly these rows.
-   */
-  /*
-   * Rows per category slug, counted over the whole catalog — the number the
-   * selector shows next to a label. Counted from the rows the panel holds rather
-   * than the vocabulary's `count`: the two agree on a healthy catalog (gate
-   * 11.4), and when they disagree the number should describe what selecting the
-   * category will actually show.
-   */
-  const countsByCategory = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const plugin of registry?.plugins ?? []) {
-      for (const part of (plugin.category ?? '').split(',')) {
-        const slug = part.trim()
-        if (slug !== '') counts.set(slug, (counts.get(slug) ?? 0) + 1)
-      }
-    }
-    return counts
-  }, [registry])
+  const matchedDiscoverRows = orderedRows
 
-  const matchedDiscoverRows = useMemo(
-    () => (filter === 'incompatible'
-      ? discoverRows.filter(row => row.compatibility?.status === 'incompatible')
-      : discoverRows),
-    [discoverRows, filter],
-  )
+  /** Size of the published ranking window currently on screen (for copy only). */
+  const recommendWindowSize = statusRows.length
 
   /**
    * The slice actually laid out, plus its page control.
    *
-   * `visibleRows` resets whenever the listing changes shape, so switching filter
-   * or typing a query never leaves the view scrolled into a stale page.
+   * `visibleRows` resets whenever the listing changes shape, so switching status,
+   * category or query never leaves the view scrolled into a stale page.
    */
   const visibleDiscoverRows = useMemo(
     () => matchedDiscoverRows.slice(0, visibleRows),
     [matchedDiscoverRows, visibleRows],
   )
-  /**
-   * True while 「推荐」 renders the website's published ranking.
-   *
-   * That view's order IS `ranking.top` (the listing memo skips sorting for it on
-   * purpose), so the sort control has nothing to act on there: showing it would be
-   * a control that provably does nothing. The other filters keep it.
-   */
-  const recommendationAvailable = registry?.ranking !== undefined
-  const rankingView = filter === 'not-installed' && recommendationAvailable
   /**
    * The operations section exists only while it has something to say: an idle
    * panel shows no strip at all (the old always-on 「共 0 条记录」 line is what got
@@ -1978,10 +2164,12 @@ export function MarketSection(props: {
   }, [operationsBusy])
   useEffect(() => {
     setVisibleRows(DISCOVER_PAGE_SIZE)
-  }, [filter, discoverQuery, sort, registry])
+  }, [filter, category, activeQuery, sort, registry])
 
   // ONE batched request per rendered candidate set — never one per card.
   const requestedCompatibility = useRef(new Set<string>())
+  /** Identifier of the most recent verdict request, so only it can clear busy. */
+  const compatibilityRequest = useRef(0)
   /**
    * Liveness guard for the in-flight verdict request.
    *
@@ -2003,11 +2191,19 @@ export function MarketSection(props: {
     // catalog entries would fire dozens of batched requests for cards nobody can
     // reach yet, while asking only about VISIBLE rows would starve the
     // "incompatible" filter (its visible set is empty until verdicts arrive).
-    const scope = discoverRows.slice(0, visibleRows + DISCOVER_PAGE_SIZE)
+    // The scope is the FINAL filtered set, so a category or search narrows what
+    // is asked about too. 「不兼容」 is the exception: its display set is empty
+    // until verdicts arrive, so it asks about the pre-verdict candidates
+    // (status + search) — otherwise it would never populate itself.
+    const candidates = filter === 'incompatible' ? searchRows : orderedRows
+    const scope = candidates.slice(0, visibleRows + DISCOVER_PAGE_SIZE)
     const missing = [...new Set(scope.map(row => row.plugin.npm ?? row.plugin.name))]
       .filter(name => name !== '' && !requestedCompatibility.current.has(name))
     if (missing.length === 0) return
     for (const name of missing) requestedCompatibility.current.add(name)
+    const requestId = compatibilityRequest.current + 1
+    compatibilityRequest.current = requestId
+    setCompatibilityLoading(true)
     void (async () => {
       try {
         for (let offset = 0; offset < missing.length; offset += 64) {
@@ -2024,9 +2220,13 @@ export function MarketSection(props: {
         // A failed forecast leaves the badge "unknown"; release the names so a
         // later listing can ask again instead of pinning them forever.
         for (const name of missing) requestedCompatibility.current.delete(name)
+      } finally {
+        if (verdictsAlive.current && compatibilityRequest.current === requestId) {
+          setCompatibilityLoading(false)
+        }
       }
     })()
-  }, [tab, discoverRows, visibleRows])
+  }, [tab, filter, searchRows, orderedRows, visibleRows])
 
   // Rows for the retained-but-unreachable installed LIST surface (`tab ===
   // 'installed'`): the card grid builds its own rows from the inventory.
@@ -2116,6 +2316,33 @@ export function MarketSection(props: {
 
   /* —— render —— */
 
+  /*
+   * The active filter CONDITIONS, in the same words the controls use. They are
+   * the single source for the active-filter strip and the empty-state
+   * explanation, so the two cannot describe a different combination.
+   */
+  const categoryFilterLabel = category === ''
+    ? undefined
+    : (() => {
+      const entry = registry?.categories?.find(candidate => candidate.id === category)
+      return entry === undefined ? category : categoryEntryLabel(entry, english)
+    })()
+  const statusFilterText = filter === 'all' ? undefined : statusFilterLabel(filter, recommendationAvailable, t)
+  const queryFilterText = activeQuery.trim()
+  const activeConditions: string[] = []
+  if (statusFilterText !== undefined) activeConditions.push(t('activeStatusChip', { label: statusFilterText }))
+  if (categoryFilterLabel !== undefined) activeConditions.push(t('activeCategoryChip', { label: categoryFilterLabel }))
+  if (queryFilterText !== '') activeConditions.push(t('activeSearchChip', { query: queryFilterText }))
+  const filtersActive = activeConditions.length > 0
+  /** Anything that still has to settle before the count/grid are final. */
+  const filteringNow = searchPending || (filter === 'incompatible' && compatibilityLoading)
+
+  const clearAllFilters = (): void => {
+    setFilter('all')
+    setCategory('')
+    setDiscoverQuery('')
+  }
+
   return (
     <div className={css.root} data-entry="galaxy-section">
       <p className={css.sub}>{t('subtitle')}</p>
@@ -2202,7 +2429,7 @@ export function MarketSection(props: {
         >
           <Toolbar
             t={t}
-            // Every filter shares one search box and one card grid — including
+            // Every status shares one search box and one card grid — including
             // 已安装, whose rows are built from the installed inventory.
             query={discoverQuery}
             onQuery={setDiscoverQuery}
@@ -2212,6 +2439,7 @@ export function MarketSection(props: {
             filter={filter}
             onFilter={setFilter}
             recommended={recommendationAvailable}
+            rankingView={rankingView}
             sort={rankingView ? undefined : sort}
             onSort={setSort}
             category={category}
@@ -2219,6 +2447,16 @@ export function MarketSection(props: {
             categories={registry?.categories}
             categoryCounts={countsByCategory}
             english={english}
+          />
+          <ActiveFilterBar
+            t={t}
+            {...(statusFilterText === undefined ? {} : { statusLabel: statusFilterText })}
+            {...(categoryFilterLabel === undefined ? {} : { categoryLabel: categoryFilterLabel })}
+            query={queryFilterText}
+            onClearStatus={() => { setFilter('all') }}
+            onClearCategory={() => { setCategory('') }}
+            onClearSearch={() => { setDiscoverQuery('') }}
+            onClearAll={clearAllFilters}
           />
           {registryLoading && registry === null && (
             <div className={css.spinnerWrap} role="status">
@@ -2237,25 +2475,105 @@ export function MarketSection(props: {
           )}
           {registryError === null && !(registryLoading && registry === null) && (
             <>
-              <p className={css.count}>
+              <p className={css.count} aria-live="polite" aria-busy={filteringNow || reloadBusy}>
                 {t('resultCount', { count: matchedDiscoverRows.length })}
+                {searchPending && (
+                  <span className={css.muted}>{` · ${t('filtering')}`}</span>
+                )}
+                {filter === 'incompatible' && compatibilityLoading && (
+                  <span className={css.muted}>{` · ${t('compatibilityChecking')}`}</span>
+                )}
                 {rankingView && (
                   // 推荐榜是有意截断的：不在榜上的插件仍然可以在「全部」里搜到。
-                  <span className={css.muted}>{` · ${t('recommendNote', { count: matchedDiscoverRows.length })}`}</span>
+                  <span className={css.muted}>{` · ${t('recommendNote', { count: recommendWindowSize })}`}</span>
                 )}
-                {refreshedAt !== null && (
+                {reloadBusy ? (
+                  // The button is disabled while it runs; this is the same fact
+                  // in the result line, where the changed numbers appear.
+                  <span className={css.muted}>{` · ${t('reloadingCatalog')}`}</span>
+                ) : refreshedAt !== null && (
                   <span className={css.muted}>
-                    {` · ${reloadBusy ? t('reloadBusy') : t('refreshedAt', { time: formatTime(refreshedAt) })}`}
+                    {` · ${t('refreshedAt', { time: formatTime(refreshedAt) })}`}
                   </span>
                 )}
               </p>
               {matchedDiscoverRows.length === 0
                 ? (
                     <div className={css.empty}>
-                      <div className={css.emptyTitle}>{category === '' ? t('noMatch') : t('categoryEmpty')}</div>
-                      <div className={css.emptyHint}>
-                        {category !== '' && rankingView ? t('categoryEmptyRecommended') : t('emptyHint')}
-                      </div>
+                      {filter === 'incompatible' && compatibilityLoading ? (
+                        <div className={css.spinnerWrap} role="status">
+                          <span className={css.spinner} aria-hidden="true" />
+                          {t('compatibilityChecking')}
+                        </div>
+                      ) : (
+                        <>
+                          <div className={css.emptyTitle}>
+                            {activeConditions.length >= 2
+                              ? t('emptyComboTitle')
+                              : categoryFilterLabel !== undefined
+                                ? t('categoryEmpty')
+                                : t('noMatch')}
+                          </div>
+                          <div className={css.emptyHint}>
+                            {activeConditions.length >= 2
+                              ? t('emptyComboHint', { conditions: activeConditions.join(' + ') })
+                              : categoryFilterLabel !== undefined
+                                ? (rankingView
+                                    ? t('categoryEmptyRecommended')
+                                    : filter === 'installed' ? t('categoryInstalledHint') : t('emptyHint'))
+                                : t('emptyHint')}
+                          </div>
+                          {rankingView && activeConditions.length > 0 && (
+                            // 「推荐」 is a bounded set: say so where the user is
+                            // looking at an empty combination involving it.
+                            <div className={css.emptyHint}>
+                              {t('recommendScopeHint', { count: recommendWindowSize })}
+                            </div>
+                          )}
+                          {filter === 'installed' && categoryFilterLabel !== undefined && (
+                            <div className={css.emptyHint}>{t('categoryInstalledHint')}</div>
+                          )}
+                          {filtersActive && (
+                            <div className={css.emptyActions}>
+                              {categoryFilterLabel !== undefined && filter !== 'all' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    // The hint's escape hatch: keep the category,
+                                    // move to the status that contains everything,
+                                    // and drop the search so the category is visible.
+                                    setFilter('all')
+                                    setDiscoverQuery('')
+                                  }}
+                                >
+                                  {t('browseCategoryInAll')}
+                                </Button>
+                              )}
+                              {categoryFilterLabel !== undefined && (
+                                <Button variant="ghost" size="sm" onClick={() => { setCategory('') }}>
+                                  {t('clearCategoryFilter')}
+                                </Button>
+                              )}
+                              {queryFilterText !== '' && (
+                                <Button variant="ghost" size="sm" onClick={() => { setDiscoverQuery('') }}>
+                                  {t('clearSearch')}
+                                </Button>
+                              )}
+                              {statusFilterText !== undefined
+                                // With a category selected, the "see this
+                                // category under All" action already changes
+                                // the status; a second button doing the same
+                                // would only add noise.
+                                && (categoryFilterLabel === undefined || filter === 'all') && (
+                                <Button variant="ghost" size="sm" onClick={() => { setFilter('all') }}>
+                                  {t('clearStatusFilter')}
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )
                 : (

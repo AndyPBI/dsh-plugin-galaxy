@@ -31,10 +31,12 @@ driven by two self-owned contracts — [`docs/implementation-contract.md`](docs/
 
 ## Features
 
-- **Discovery** — five state filters (all / recommended / installed / updatable / incompatible) over
-  one card grid, plus a **category selector built from the catalog's own vocabulary** with the
-  featured category (「甄选」 / Featured) promoted to a chip next to 「全部」; search across name, npm
-  package, category label, description and author.
+- **Discovery** — five mutually exclusive state filters (all / recommended / installed / updatable /
+  incompatible) over one card grid, plus a **category filter that is a separate AND filter applied
+  inside the current state set** (switching state keeps the category; counts are scoped to the state
+  and show an explicit `(0)`). The featured category (「甄选」 / Featured) keeps a one-click chip in the
+  category controls, and an active-filter strip lists every stacked condition with a one-click
+  remove / clear-all; search across name, npm package, category label, description and author.
 - **Recommended view** — the catalog's ranking (`ranking.top`, window 20), with `#1`, `#2`, … badges,
   S/A/B/C bands, a score breakdown tooltip and pinned editor picks.
 - **Lifecycle** — one-click install; enable/disable, update, uninstall, notes, groups, favorites,
