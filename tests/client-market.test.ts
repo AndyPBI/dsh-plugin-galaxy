@@ -87,6 +87,18 @@ async function flush(times = 8): Promise<void> {
   }
 }
 
+/**
+ * Wait past the search debounce (SEARCH_DEBOUNCE_MS = 180) before asserting.
+ *
+ * The input itself is immediate; the listing deliberately waits for a pause so
+ * typing does not recompute the whole catalog on every keystroke. A test that
+ * only calls `flush()` would assert against the previous listing.
+ */
+async function settleSearch(): Promise<void> {
+  await new Promise(resolve => { setTimeout(resolve, 250) })
+  await flush()
+}
+
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
@@ -430,6 +442,30 @@ describe('Discover — manual refresh', () => {
   })
 })
 
+describe('Discover — filter feedback', () => {
+  it('shows a filtering state until the debounced search settles', async () => {
+    const host = await mount()
+    const input = [...host.querySelectorAll('input')]
+      .find(element => (element.getAttribute('aria-label') ?? '').startsWith('Search plugins')) as HTMLInputElement
+    typeInto(input, 'memory')
+    await flush()
+    // The input is immediate; the listing is still on the previous term.
+    expect(host.textContent).toContain('Filtering…')
+    await settleSearch()
+    expect(host.textContent).not.toContain('Filtering…')
+    expect(cardTitles(host).length).toBeGreaterThan(0)
+  })
+
+  it('says the sort applies within the current results', async () => {
+    const host = await mount()
+    await flush()
+    expect(host.textContent).toContain('Sort (in current results)')
+    // The narrow-width fallback keeps the explanation in the DOM when the
+    // control label collapses (CSS decides when it is visible).
+    expect(host.textContent).toContain('Sorting applies to the current results only')
+  })
+})
+
 describe('A mutation that never answers', () => {
   /**
    * The reported defect: an install whose package command was killed (or whose
@@ -734,6 +770,28 @@ describe('Discover — the recommended (未安装) view', () => {
     expect(titles).toEqual(['dsh-one', 'dsh-two', 'dsh-three'])
   })
 
+  it('filters INSIDE the ranking window instead of reaching deeper into the list', async () => {
+    /*
+     * The primary set of 「推荐」 is the published window (3 here). A search or a
+     * category is a SECONDARY filter inside it: matching rank #5 must not make
+     * the view pull in a plugin the window does not contain. The empty state
+     * then explains the combination and points at 「全部」.
+     */
+    installRankingStub()
+    const host = await mount()
+    await flush()
+    clickChip(host, 'Recommended')
+    await flush()
+    const input = [...host.querySelectorAll('input')]
+      .find(element => (element.getAttribute('aria-label') ?? '').startsWith('Search plugins')) as HTMLInputElement
+    typeInto(input, 'dsh-five')
+    await settleSearch()
+
+    expect(cardTitles(host)).toEqual([])
+    expect(host.textContent).toContain('No results for this filter combination')
+    expect(host.textContent).toContain('combine with AND')
+  })
+
   it('names the ranking chip 「推荐」 and numbers the cards 1, 2, 3…', async () => {
     /*
      * The chip replaced 「未安装」: with a `ranking` block it renders the website's
@@ -816,6 +874,8 @@ describe('Discover — the recommended (未安装) view', () => {
     clickChip(host, 'Recommended')
     await flush()
     expect(host.querySelector('select')).toBeNull()
+    // ... and the gap says WHY, instead of leaving an unexplained missing knob.
+    expect(host.textContent).toContain('Order is the published rank')
 
     clickChip(host, 'All')
     await flush()
@@ -940,11 +1000,11 @@ describe('Discover — the label the website ships (displayName)', () => {
     expect(input).toBeDefined()
 
     typeInto(input, 'archify integrations')
-    await flush()
+    await settleSearch()
     expect(cardTitles(host)).toEqual(['archify integrations/deepseek-harness'])
 
     typeInto(input, 'archify#integrations')
-    await flush()
+    await settleSearch()
     expect(cardTitles(host)).toEqual(['archify integrations/deepseek-harness'])
   })
 })
@@ -1029,7 +1089,7 @@ describe('Discover — category labels follow the catalog', () => {
       .find(element => (element.getAttribute('aria-label') ?? '').startsWith('搜索')) as HTMLInputElement
     expect(input).toBeDefined()
     typeInto(input, '甄选')
-    await flush()
+    await settleSearch()
     expect(cardTitles(host)).toEqual(['dsh-atlas'])
   })
 })
@@ -1137,31 +1197,82 @@ describe('Discover — the category selector browses the site vocabulary', () =>
     const input = [...host.querySelectorAll('input')]
       .find(element => (element.getAttribute('aria-label') ?? '').startsWith('搜索')) as HTMLInputElement
     typeInto(input, '花销')
-    await flush()
+    await settleSearch()
     expect(cardTitles(host)).toEqual([])
   })
 
-  it('explains an empty category instead of looking broken', async () => {
+  it('explains a filter COMBINATION with no results, and offers a way out', async () => {
     // 「推荐」 is the fixed ranking (one scored row); the curated row is not on it,
-    // so the combination is honestly empty and the hint says how to see it.
+    // so the combination is honestly empty. The old copy only said "the category
+    // is empty", which reads as a category problem rather than a combination.
     const host = await mountIn('zh', true)
     clickChip(host, '推荐')
     await flush()
     selectOption(categorySelect(host, '分类筛选'), 'curated')
     await flush()
     expect(cardTitles(host)).toEqual([])
-    expect(host.textContent).toContain('该分类下没有可显示的条目')
-    expect(host.textContent).toContain('切到「全部」')
+
+    const text = host.textContent ?? ''
+    expect(text).toContain('当前筛选组合没有结果')
+    expect(text).toContain('交集（AND）')
+    expect(text).toContain('状态：推荐')
+    expect(text).toContain('分类：甄选')
+    expect(text).toContain('推荐榜前 1 条')
+
+    // The escape hatch keeps the category and moves the status to 全部.
+    const escape = [...host.querySelectorAll('button')]
+      .find(button => (button.textContent ?? '').trim() === '切到「全部」查看该分类')
+    expect(escape).toBeDefined()
+    escape?.click()
+    await flush()
+    expect(cardTitles(host)).toEqual(['dsh-atlas'])
+    // The category is NOT cleared by the status switch — the two are ANDed.
+    expect(categorySelect(host, '分类筛选').value).toBe('curated')
+  })
+
+  it('applies the category INSIDE the installed status too', async () => {
+    // 「已安装」 used to ignore the category entirely: the status branch was
+    // written before the category existed, so the two filters were not really
+    // ANDed. The installed inventory has no curated member, so the honest
+    // answer is the combination empty state.
+    const host = await mountIn('zh')
+    clickChip(host, '已安装')
+    await flush()
+    expect(cardTitles(host).length).toBe(INSTALLED.length)
+
+    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    await flush()
+    expect(cardTitles(host)).toEqual([])
+    expect(host.textContent).toContain('当前筛选组合没有结果')
+
+    const clear = [...host.querySelectorAll('button')]
+      .find(button => (button.textContent ?? '').trim() === '清除分类筛选')
+    clear?.click()
+    await flush()
+    expect(cardTitles(host).length).toBe(INSTALLED.length)
+  })
+
+  it('counts categories within the active status, not the whole catalog', async () => {
+    // In the ranking window only `dsh-spend` is present, so 甄选 must read (0):
+    // a global count would promise plugins the combination cannot show.
+    const host = await mountIn('zh', true)
+    clickChip(host, '推荐')
+    await flush()
+    const select = categorySelect(host, '分类筛选')
+    expect([...select.options].map(option => option.textContent)).toEqual([
+      '全部分类', '甄选 (0)', '费用与额度 (1)',
+    ])
   })
 })
 
-describe('Discover — the featured category is a chip, and the controls share a line', () => {
+describe('Discover — the featured category shortcut lives with the category controls', () => {
   /**
-   * Two layout requirements from the field:
+   * Two requirements from the field, reconciled with the separation rule:
    *  1. the site's featured category (甄选, first in the published vocabulary)
-   *     must be visible WITHOUT opening a selector — the front page lists
-   *     categories as chips with 甄选 pinned first, so the panel promotes the
-   *     first vocabulary entry into the chip row right after 「全部」;
+   *     stays visible WITHOUT opening a selector, but it is a CATEGORY shortcut:
+   *     it belongs beside the category selector, not inside the status chip row
+   *     (where it read as a sixth, mutually-exclusive status and was the source
+   *     of the category/status coupling);
    *  2. 「分类筛选」 and 「排序」 must sit on one line — a wrapping toolbar dropped
    *     the category selector onto a line of its own at some widths.
    */
@@ -1220,13 +1331,24 @@ describe('Discover — the featured category is a chip, and the controls share a
       .find(button => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined
   }
 
-  it('lists 甄选 second, right after 全部', async () => {
+  it('keeps 甄选 OUT of the status row and in the category controls', async () => {
     const host = await mountIn('zh')
-    const labels = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
-    expect(labels.slice(0, 3)).toEqual(['全部', '甄选', '已安装'])
+    // The status row is mutually exclusive: no category may appear in it.
+    const statusRow = host.querySelector('[role="group"][aria-label="插件状态"]')
+    expect(statusRow).not.toBeNull()
+    const statusLabels = [...(statusRow?.querySelectorAll('button') ?? [])]
+      .map(button => (button.textContent ?? '').trim())
+    expect(statusLabels.slice(0, 3)).toEqual(['全部', '已安装', '未安装'])
+    expect(statusLabels).not.toContain('甄选')
+
+    // The shortcut exists, but is labelled and styled as a category control.
+    const quick = [...host.querySelectorAll('button[aria-pressed]')]
+      .find(button => (button.textContent ?? '').trim() === '甄选')
+    expect(quick).toBeDefined()
+    expect(quick?.getAttribute('aria-label')).toBe('分类快捷筛选：甄选')
   })
 
-  it('localizes the featured chip and toggles the filter from it', async () => {
+  it('localizes the featured shortcut and toggles the category from it', async () => {
     const host = await mountIn('en')
     const featured = chip(host, 'Featured')
     expect(featured).toBeDefined()
@@ -1240,16 +1362,47 @@ describe('Discover — the featured category is a chip, and the controls share a
     expect(cardTitles(host).length).toBe(2)
   })
 
-  it('keeps the chip and the selector in sync', async () => {
+  it('keeps the shortcut, the selector and the active-filter strip in sync', async () => {
     const host = await mountIn('zh')
     const select = host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
     selectOption(select, 'curated')
     await flush()
     expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('true')
-    // 「全部」 clears the category too — it is the "no filter" entry.
+
+    // 「全部」 is a STATUS, not a reset: it must leave the category in force and
+    // re-apply it inside the full set (AND). The old behaviour cleared the
+    // category here, which is the coupling this ticket removes.
     chip(host, '全部')?.click()
     await flush()
+    expect(select.value).toBe('curated')
+    expect(cardTitles(host)).toEqual(['dsh-atlas'])
+
+    // The category is removed from the active-filter strip, one condition only.
+    const clearCategory = [...host.querySelectorAll('button')]
+      .find(button => (button.getAttribute('aria-label') ?? '') === '移除筛选：分类：甄选')
+    expect(clearCategory).toBeDefined()
+    clearCategory?.click()
+    await flush()
+    expect(select.value).toBe('')
+    expect(cardTitles(host).length).toBe(2)
+  })
+
+  it('shows every stacked condition and clears them all at once', async () => {
+    const host = await mountIn('zh')
+    selectOption(host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement, 'curated')
+    await flush()
+    // Status default (全部) is not a condition; the category is.
+    expect(host.textContent).toContain('已叠加 1 个筛选条件')
+    expect(host.textContent).toContain('分类：甄选')
+
+    const clearAll = [...host.querySelectorAll('button')]
+      .find(button => (button.textContent ?? '').trim() === '清除全部筛选')
+    expect(clearAll).toBeDefined()
+    clearAll?.click()
+    await flush()
     expect((host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement).value).toBe('')
+    expect(host.textContent).not.toContain('已叠加')
+    expect(cardTitles(host).length).toBe(2)
   })
 
   it('puts 分类筛选 and 排序 on one non-wrapping line', async () => {

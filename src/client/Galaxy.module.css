@@ -66,6 +66,39 @@
 .search{flex:1;min-width:160px}
 .input,.select{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#d5d9e0));background:var(--dsh-bg-elevated,var(--dsw-alias-bg-layer-1,#fff));color:inherit}
 .checkbox{accent-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7))}
+/* 排序 applies to the CURRENT filtered set, not the whole catalog. The parenthetical
+ * is inside the control's label, so it reads as part of the control instead of a
+ * separate hint nobody associates with the dropdown. It collapses with the rest of
+ * the label at the dialog's narrow width (the select keeps its aria-label). */
+.sortScope{font-size:11px;font-weight:400}
+/* Narrow panels collapse the 「排序」 text label to keep the control row on one
+ * line; the scope explanation then moves to its own line rather than vanishing.
+ * The query resolves against `.root` (the nearest container for this sibling). */
+.sortScopeNarrow{display:none;font-size:11px;line-height:16px;margin:0}
+@container (max-width:430px){
+  .sortScopeNarrow{display:block}
+}
+/* The featured category shortcut uses a PILL, not the status-tab underline: it is
+ * a category control, and must not look like a sixth mutually-exclusive status. */
+.categoryQuick{border:1px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));background:transparent;color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));font:inherit;font-size:12px;line-height:18px;padding:3px 10px;border-radius:999px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+.categoryQuick:hover{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8))}
+.categoryQuick:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:1px}
+.categoryQuickActive{background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));color:#fff}
+.categoryQuickActive:hover{background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7))}
+/* The published ranking fixes the order; say that where the sort control would be. */
+.rankingHint{font-size:12px;line-height:18px;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+/* The filters currently stacked, each removable. Wrapping is deliberate: the
+ * combination can carry a long category label and a search term, and a single
+ * non-wrapping line would push the clear-all action out of the dialog. */
+.activeFilters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;line-height:18px;padding:2px 0}
+.filterChip{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:1px 4px 1px 8px;border-radius:999px;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8));color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280))}
+.filterChipLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filterChipClear{border:none;background:none;font:inherit;font-size:13px;line-height:1;padding:2px 3px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));cursor:pointer;border-radius:50%}
+.filterChipClear:hover{color:var(--dsh-text-primary,var(--dsw-alias-label-primary,#1f2328))}
+.filterChipClear:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:1px}
+.clearAllFilters{border:none;background:none;font:inherit;font-size:12px;line-height:18px;color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));cursor:pointer;padding:1px 2px}
+.clearAllFilters:hover{text-decoration:underline}
 
 /* ---------------------------------------------------------------- *
  * Body, sections, generic rows
@@ -249,7 +282,10 @@
 
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:40px 16px;text-align:center;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
 .emptyTitle{font-size:13px;font-weight:600;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280))}
-.emptyHint{font-size:12px;line-height:19px}
+.emptyHint{font-size:12px;line-height:19px;max-width:56ch}
+/* The escape hatches under an empty state: one per condition in force, so a user
+ * who does not want to reason about AND can simply remove the wrong one. */
+.emptyActions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding-top:4px}
 
 .progress{display:flex;flex-direction:column;gap:4px;min-width:0}
 .progressTrack{height:4px;border-radius:999px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#e9ecf1));overflow:hidden}
