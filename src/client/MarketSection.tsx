@@ -611,6 +611,13 @@ function Toolbar(props: {
       return entry === undefined ? category : categoryEntryLabel(entry, props.english === true)
     })()
   const chip = (active: boolean) => (active ? `${css.filterChip} ${css.filterChipActive}` : css.filterChip)
+  /*
+   * The status row is a mutually-exclusive group, 甄选 included. 「全部」 therefore
+   * stays selected while only a non-featured category narrows the listing (the
+   * status is still "all"); when the featured category is the active one, 甄选
+   * carries the selection and 全部 steps back.
+   */
+  const allActive = filter === 'all' && (featured === undefined || category !== featured.id)
   return (
     <div className={css.toolbar}>
       <div className={css.toolbarLine}>
@@ -641,11 +648,11 @@ function Toolbar(props: {
             <button
               key={entry.id}
               type="button"
-              /* 「全部」 is the "no filter" entry: it also clears the category, so
-               * it counts as selected only while neither a status nor a category
-               * narrows the listing. */
-              aria-pressed={filter === entry.id && (category === undefined || category === '')}
-              className={chip(filter === entry.id && (category === undefined || category === ''))}
+              /* 「全部」 is the "no filter" entry: clicking it also clears the
+               * category. Its selected state follows the status alone, except
+               * while 甄选 owns the selection (see allActive). */
+              aria-pressed={allActive}
+              className={chip(allActive)}
               onClick={() => {
                 onCategory?.('')
                 onFilter(entry.id)
@@ -659,7 +666,17 @@ function Toolbar(props: {
               type='button'
               aria-pressed={category === featured.id}
               className={chip(category === featured.id)}
-              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
+              onClick={() => {
+                if (category === featured.id) {
+                  onCategory('')
+                  return
+                }
+                /* Every chip in this row is exclusive with the others: picking
+                 * 甄选 returns the status to 「全部」 so 「已安装」 (or any other
+                 * state) does not stay highlighted beside it. */
+                onFilter('all')
+                onCategory(featured.id)
+              }}
             >
               {categoryEntryLabel(featured, props.english === true)}
             </button>
@@ -670,7 +687,14 @@ function Toolbar(props: {
               type="button"
               aria-pressed={filter === entry.id}
               className={chip(filter === entry.id)}
-              onClick={() => onFilter(entry.id)}
+              onClick={() => {
+                /* Status chips are exclusive with 甄选: choosing a status clears
+                 * the category shortcut, so the row never shows two selected
+                 * entries. The category SELECTOR can still stack a filter (see
+                 * the contract), but a chip click means "show me this view". */
+                onCategory?.('')
+                onFilter(entry.id)
+              }}
             >
               {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
             </button>

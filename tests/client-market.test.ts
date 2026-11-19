@@ -1276,6 +1276,33 @@ describe('Discover — the featured category is a chip, and the controls share a
     expect(chip(host, '甄选')?.className).toContain('filterChipActive')
   })
 
+  it('keeps the status row mutually exclusive (甄选 then 已安装, and back)', async () => {
+    /*
+     * Field regression: after picking 甄选 and then a status, both chips stayed
+     * highlighted because the category shortcut did not take part in the row's
+     * exclusivity. Each chip click must leave exactly one pressed entry.
+     */
+    const host = await mountIn('zh')
+    const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
+      .map(button => (button.textContent ?? '').trim())
+    const category = (): HTMLSelectElement => host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
+
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
+    expect(category().value).toBe('curated')
+
+    chip(host, '已安装')?.click()
+    await flush()
+    expect(pressed()).toEqual(['已安装'])
+    expect(category().value).toBe('')
+
+    // The other direction: picking 甄选 again must release the status.
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
+  })
+
   it('localizes the featured chip and toggles the filter from it', async () => {
     const host = await mountIn('en')
     const featured = chip(host, 'Featured')
