@@ -34,14 +34,62 @@
 .tab:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:-2px}
 .tabActive,.tabOn{color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));border-bottom-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));font-weight:600}
 
-/* Three deliberate lines instead of one wrapping row: search, the chips, then the
- * 分类筛选 + 排序 controls. A wrapping flex row dropped the controls onto a line of
- * their own at some widths, which is what "keep them on the same line" rules out. */
+/* Clickable filter chips (the status row and the 甄选 shortcut).
+ *
+ * The click result is a COLOUR: the selected chip is filled with the host's
+ * accent while the others stay transparent, so a click leaves an unambiguous
+ * mark. Before this the only cue was a 2px underline and the same text colour
+ * the chip already had on hover — after clicking, nothing distinguished the
+ * selected chip from the one the pointer was resting on, which is what read as
+ * a lingering after-image ("残影"). Hover and press deliberately do NOT repaint
+ * a selected chip, and no transition is declared, so the fill lands with the
+ * click and stays put instead of animating through intermediate colours.
+ *
+ * Colour comes from the host's semantic aliases (accent + its foreground), so
+ * light and dark both keep the same contrast without a second literal. */
+.filterChip{
+  border:1px solid transparent;
+  background:transparent;
+  font:inherit;
+  font-size:13px;
+  line-height:18px;
+  color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));
+  padding:4px 12px;
+  border-radius:999px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.filterChip:hover:not(.filterChipActive){
+  background:var(--dsw-alias-interactive-bg-hover,var(--dsh-bg-secondary,#f0f2f5));
+  color:var(--dsh-text-primary,var(--dsw-alias-label-primary,#1f2328));
+}
+.filterChip:active:not(.filterChipActive){
+  background:var(--dsw-alias-interactive-bg-active,var(--dsh-bg-secondary,#e6e9ef));
+}
+.filterChip:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:2px}
+.filterChipActive,.filterChipActive:hover,.filterChipActive:active{
+  background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
+  border-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
+  color:var(--dsw-alias-label-primary-foreground,#fff);
+  font-weight:600;
+}
+/* The 甄选 shortcut sits beside a labelled select, where unselected plain text
+ * read as a second label. A hairline outline keeps it visibly a control without
+ * competing with the filled selected state (which keeps the accent border). */
+.categoryQuick:not(.filterChipActive){border-color:var(--dsh-border,var(--dsw-alias-border-l3,#d5d9e0))}
+
+/* Three deliberate lines instead of one wrapping row: search, the status chips,
+ * then the category controls (分类筛选 · 甄选 · 排序). The featured-category chip
+ * lives on the category line, not among the statuses: a category is not a
+ * mutually-exclusive state, and the field asked for it to sit horizontally with
+ * the category control it shortcuts. A wrapping flex row dropped the controls
+ * onto a line of their own at some widths, which is what "keep them on the same
+ * line" rules out. */
 .toolbar{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px 0}
 .toolbarLine{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
 /* Chips may outgrow the dialog once the site adds categories; scroll rather than
  * wrap so the row height stays predictable. */
-.chipLine{overflow-x:auto;padding-bottom:2px}
+.chipLine{overflow-x:auto;padding:2px 2px 4px}
 .toolbarControlsLine{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;white-space:nowrap;min-width:0}
 /* The category control carries the site's whole vocabulary, including labels like
  * 服务与交易（客服 / 订阅 / 开票 / 支付）: at its intrinsic width (a flex item's

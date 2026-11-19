@@ -162,17 +162,26 @@ class MutationAbandoned extends Error {
   }
 }
 
-type SortField = 'name' | 'stars' | 'downloads' | 'added'
+type SortField = 'score' | 'stars' | 'added'
 type SortDir = 'asc' | 'desc'
 type SortKey = `${SortField}-${SortDir}`
 
+/**
+ * The sort menu, in the order the panel offers it.
+ *
+ * Name and npm-download orderings were removed on request (they either repeated
+ * the card labels or measured something the panel does not rank by); the
+ * composite catalog score takes their place and is the default, so the market
+ * opens on its best entries instead of an alphabetical list. Score is a badge
+ * AND an ordering — the published recommendation WINDOW remains a separate view
+ * whose order is `ranking.top`, so a score sort here never pretends to be the
+ * site's rank.
+ */
 const SORTS = [
-  { id: 'name-asc', field: 'sortName', dir: 'sortAsc' },
-  { id: 'name-desc', field: 'sortName', dir: 'sortDesc' },
+  { id: 'score-desc', field: 'sortScore', dir: 'sortDesc' },
+  { id: 'score-asc', field: 'sortScore', dir: 'sortAsc' },
   { id: 'stars-desc', field: 'sortStars', dir: 'sortDesc' },
   { id: 'stars-asc', field: 'sortStars', dir: 'sortAsc' },
-  { id: 'downloads-desc', field: 'sortDownloads', dir: 'sortDesc' },
-  { id: 'downloads-asc', field: 'sortDownloads', dir: 'sortAsc' },
   { id: 'added-desc', field: 'sortAdded', dir: 'sortDesc' },
   { id: 'added-asc', field: 'sortAdded', dir: 'sortAsc' },
 ] as const satisfies ReadonlyArray<{ id: SortKey; field: string; dir: string }>
@@ -470,10 +479,9 @@ function compareRows(a: DiscoverRow, b: DiscoverRow, field: SortField, dir: Sort
     return Number.isNaN(parsed) ? 0 : parsed
   }
   switch (field) {
+    case 'score': return sign * (number(a.plugin.score) - number(b.plugin.score))
     case 'stars': return sign * (number(a.plugin.stars) - number(b.plugin.stars))
-    case 'downloads': return sign * (number(a.plugin.downloads) - number(b.plugin.downloads))
     case 'added': return sign * (date(a.plugin.added) - date(b.plugin.added))
-    default: return sign * a.plugin.name.localeCompare(b.plugin.name)
   }
 }
 
@@ -589,10 +597,12 @@ function Toolbar(props: {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
   /*
    * The site's own front page lists every category as a chip with 「甄选」 pinned
-   * first, so the panel promotes the FIRST published category to a chip right
-   * after 「全部」: the featured category is then visible without opening a
-   * selector, and the site can move the promotion by reordering its vocabulary.
-   * The selector still reaches the whole vocabulary.
+   * first. The panel keeps that shortcut visible, but it belongs to the CATEGORY
+   * controls: putting it in the status chip row made a category look like one of
+   * the mutually-exclusive states. It now sits on the 分类筛选 line, horizontally
+   * with the selector it shortcuts, which also keeps the click state (a filled
+   * chip) next to the control it explains. The selector still reaches the whole
+   * vocabulary.
    */
   const featured = categories?.[0]
   const selectedCategoryLabel = category === undefined || category === ''
@@ -601,7 +611,7 @@ function Toolbar(props: {
       const entry = categories?.find(candidate => candidate.id === category)
       return entry === undefined ? category : categoryEntryLabel(entry, props.english === true)
     })()
-  const chip = (active: boolean) => (active ? `${css.tab} ${css.tabActive}` : css.tab)
+  const chip = (active: boolean) => (active ? `${css.filterChip} ${css.filterChipActive}` : css.filterChip)
   return (
     <div className={css.toolbar}>
       <div className={css.toolbarLine}>
@@ -628,37 +638,21 @@ function Toolbar(props: {
       </div>
       {filter !== undefined && onFilter !== undefined && (
         <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('filterLabel')}>
-          {FILTERS.slice(0, 1).map(entry => (
+          {FILTERS.map(entry => (
             <button
               key={entry.id}
               type="button"
-              aria-pressed={filter === entry.id && (category === undefined || category === '')}
-              className={chip(filter === entry.id && (category === undefined || category === ''))}
-              onClick={() => {
-                onCategory?.('')
-                onFilter(entry.id)
-              }}
-            >
-              {t(entry.label)}
-            </button>
-          ))}
-          {featured !== undefined && onCategory !== undefined && category !== undefined && (
-            <button
-              type="button"
-              aria-pressed={category === featured.id}
-              className={chip(category === featured.id)}
-              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
-            >
-              {categoryEntryLabel(featured, props.english === true)}
-            </button>
-          )}
-          {FILTERS.slice(1).map(entry => (
-            <button
-              key={entry.id}
-              type="button"
+              /* The status row states the STATUS only. 「全部」 also clears the
+               * category when clicked (it is the "no filter" entry), but a
+               * category selection no longer has to blank this row's selected
+               * chip: the category shortcut has its own pressed state on the
+               * category line now. */
               aria-pressed={filter === entry.id}
               className={chip(filter === entry.id)}
-              onClick={() => onFilter(entry.id)}
+              onClick={() => {
+                if (entry.id === 'all') onCategory?.('')
+                onFilter(entry.id)
+              }}
             >
               {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
             </button>
@@ -695,6 +689,17 @@ function Toolbar(props: {
             })}
           </select>
         </label>
+      )}
+      {featured !== undefined && category !== undefined && onCategory !== undefined && (
+        <button
+          type='button'
+          aria-pressed={category === featured.id}
+          className={`${chip(category === featured.id)} ${css.categoryQuick}`}
+          title={categoryEntryLabel(featured, props.english === true)}
+          onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
+        >
+          {categoryEntryLabel(featured, props.english === true)}
+        </button>
       )}
       {sort !== undefined && onSort !== undefined && (
         <label className={`${css.row} ${css.controlsFixed}`}>
@@ -1380,7 +1385,7 @@ export function MarketSection(props: {
   const [filter, setFilter] = useState<DiscoverFilter>(
     () => (tabFromPreferred(props.preferredSubsectionId) === 'installed' ? 'installed' : 'all'),
   )
-  const [sort, setSort] = useState<SortKey>('name-asc')
+  const [sort, setSort] = useState<SortKey>('score-desc')
   // '' = no category filter. Kept as a slug (not a label) because the site owns
   // the vocabulary and may relabel a category without changing its rows.
   const [category, setCategory] = useState('')
