@@ -334,7 +334,7 @@ monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepse
 | 选中的是 **slug**，不是标签 | 站点可以给分类改标签而不动行数据 |
 | 分类筛选与「状态筛选」「搜索」叠加：先按分类，再按状态，再按搜索 | 三者是正交维度 |
 | 「推荐」是固定榜单：分类过滤同样生效，结果为空时提示"切到「全部」" | 榜单只收录计分条目（甄选类不计分），不假装有内容 |
-| **词表首个分类会被提成 chip**，放在「分类筛选」那一行、与分类下拉和排序水平排列（当前 = 甄选） | 官网首页把分类做成 chips 且甄选恒定置顶；放到下拉里等于"看不见"。它是**分类**快捷方式，不是状态筛选，所以不能混进状态 chip 行（会被读成第六种状态）。官网调整词表顺序，chip 自动跟随 |
+| **词表首个分类会被提成 chip**，排在状态行「全部」之后（当前 = 甄选：全部 / 甄选 / 已安装 / 推荐 / 可更新 / 不兼容） | 官网首页把分类做成 chips 且甄选恒定置顶；放到下拉里等于"看不见"。现场要求它就在状态栏这一行、紧跟「全部」；它仍是**分类**开关（与下拉同一个状态），选中时「全部」退出选中态，行内始终只有一个选中项。官网调整词表顺序，chip 自动跟随 |
 | chip 与下拉是同一个状态：chip 点击是开关（再点一次清除），「全部」也会清除分类 | 两个入口必须可互相解释，不能各说各话 |
 | 点击后的选中态是**整块颜色**（host accent 填充 + 前景色），不是只有下划线 | 下划线 + 文字色与 hover 变的是同一个色，点完分不清"选中"和"鼠标还停在这"，看起来像点击残影；填充色让点击结果一眼可辨，hover/按下都不再改选中块的颜色，且不声明 transition（不经过中间色） |
 
@@ -343,8 +343,8 @@ monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepse
 | 行 | 内容 | 约束 |
 |---|---|---|
 | 1 | 搜索框 · 视图自带控件 · 刷新 | 搜索框 `flex:1` |
-| 2 | **只有状态 chips**（`role="group"`） | `overflow-x:auto` 横向滚动，**不换行**（官网分类变多时行高仍稳定） |
-| 3 | **分类筛选 + 甄选 + 排序** | `.toolbarControlsLine`，`flex-wrap:nowrap` + `white-space:nowrap`，三者**必须同行** |
+| 2 | **状态 chips + 甄选**（`role="group"`；全部 / 甄选 / 已安装 / 推荐 / 可更新 / 不兼容） | `overflow-x:auto` 横向滚动，**不换行**（官网分类变多时行高仍稳定） |
+| 3 | **分类筛选 + 排序** | `.toolbarControlsLine`，`flex-wrap:nowrap` + `white-space:nowrap`，两者**必须同行** |
 
 > 原因：`.toolbar` 原先是 `flex-wrap:wrap` 的横排，某些宽度下「分类筛选」会被挤到单独一行（实测 `分类筛选 top=88 / 排序 top=46`）。
 > 布局探针（`npm run screenshots` 的 CDP 探测）会把两个 select 的 `getBoundingClientRect()` 一起报出来，改坏了会直接可见。
@@ -355,13 +355,13 @@ monorepo 条目在目录里是 `repo#subpath`（如 `archify#integrations/deepse
 |---|---|---|
 | 分类框与排序**重叠** | 分类框最长的选项（`服务与交易（客服 / 订阅 / 开票 / 支付） (18)`）撑起 `min-width:auto`，flex 不肯收缩 | 分类框 `min-width:0` + `max-width:320px` + `overflow:hidden;text-overflow:ellipsis`（完整标签走 `title`） |
 | 窄宽度下整行**溢出**对话框 | 行宽仍由内容决定 | `.toolbarControlsLine{container-type:inline-size}`：行宽改由容器决定，子项只能压缩不能撑宽；`@container (max-width:430px)` 时隐藏两个文字标签（两个 select 自身可读，且保留 `aria-label`） |
-| 排序被压缩 | 两个控件都可收缩 | 分类框 `flex:0 1 auto`（可收缩），甄选 chip 与排序 `flex:0 0 auto`（不参与压缩） |
+| 排序被压缩 | 两个控件都可收缩 | 分类框 `flex:0 1 auto`（可收缩），排序 `flex:0 0 auto`（不参与压缩） |
 
 实测（`npm run screenshots` 自动跑，宽 1044 逐视图 + **真实对话框宽 420 / 380**）：
 
 ```
-420px: 分类框 right=186  甄选 200–252  排序 left=266  排序 right=398 ≤ 视口 420   PASS
-380px: 分类框 right=146  甄选 160–212  排序 left=226  排序 right=358 ≤ 视口 380   PASS
+420px: 分类框 right=252  排序 left=266  排序 right=398 ≤ 视口 420   PASS
+380px: 分类框 right=212  排序 left=226  排序 right=358 ≤ 视口 380   PASS
 ```
 
 > 注意：截图探针页的 `#root` 必须 `width:100%`（曾写死 1000px，导致三档宽度测出同一组数字，等于没测）。

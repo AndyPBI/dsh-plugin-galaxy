@@ -73,18 +73,11 @@
   color:var(--dsw-alias-label-primary-foreground,#fff);
   font-weight:600;
 }
-/* The 甄选 shortcut sits beside a labelled select, where unselected plain text
- * read as a second label. A hairline outline keeps it visibly a control without
- * competing with the filled selected state (which keeps the accent border). */
-.categoryQuick:not(.filterChipActive){border-color:var(--dsh-border,var(--dsw-alias-border-l3,#d5d9e0))}
 
-/* Three deliberate lines instead of one wrapping row: search, the status chips,
- * then the category controls (分类筛选 · 甄选 · 排序). The featured-category chip
- * lives on the category line, not among the statuses: a category is not a
- * mutually-exclusive state, and the field asked for it to sit horizontally with
- * the category control it shortcuts. A wrapping flex row dropped the controls
- * onto a line of their own at some widths, which is what "keep them on the same
- * line" rules out. */
+/* Three deliberate lines instead of one wrapping row: search, the status chips
+ * (including the 甄选 shortcut, second after 「全部」), then the 分类筛选 + 排序
+ * controls. A wrapping flex row dropped the controls onto a line of their own at
+ * some widths, which is what "keep them on the same line" rules out. */
 .toolbar{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px 0}
 .toolbarLine{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
 /* Chips may outgrow the dialog once the site adds categories; scroll rather than

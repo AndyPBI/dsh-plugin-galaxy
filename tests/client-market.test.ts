@@ -1183,10 +1183,9 @@ describe('Discover — the featured category is a chip, and the controls share a
   /**
    * Layout requirements from the field:
    *  1. the site's featured category (甄选, first in the published vocabulary)
-   *     stays visible WITHOUT opening a selector, but it is a CATEGORY shortcut
-   *     and must sit horizontally with the category controls — not among the
-   *     mutually-exclusive status chips, where it read as a sixth status;
-   *  2. 「分类筛选」, 「甄选」 and 「排序」 share one non-wrapping line;
+   *     is a shortcut in the STATUS bar, second after 「全部」:
+   *     全部, 甄选, 已安装, 推荐, 可更新, 不兼容;
+   *  2. 「分类筛选」 and 「排序」 share one non-wrapping line;
    *  3. the clicked chip is marked by its own colour (a class the stylesheet
    *     fills), so hover cannot be mistaken for the selection.
    */
@@ -1245,22 +1244,20 @@ describe('Discover — the featured category is a chip, and the controls share a
       .find(button => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined
   }
 
-  it('keeps the status row to statuses and puts 甄选 on the category line', async () => {
+  it('lists 甄选 second in the status row, right after 全部', async () => {
     const host = await mountIn('zh')
     const statuses = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
     // This stub ships no `ranking` block, so the recommendation entry renders
     // its honest fallback name 「未安装」.
-    expect(statuses).toEqual(['全部', '已安装', '未安装', '可更新', '不兼容'])
+    expect(statuses).toEqual(['全部', '甄选', '已安装', '未安装', '可更新', '不兼容'])
 
-    const featured = chip(host, '甄选')
-    expect(featured).toBeDefined()
+    // 分类筛选与排序仍在同一行（甄选不占用这一行）。
     const category = host.querySelector('select[aria-label="分类筛选"]')
     const sort = host.querySelector('select[aria-label="排序"]')
     const line = category?.closest('[class*="toolbarControlsLine"]')
     expect(line).not.toBeNull()
-    // 甄选与分类下拉、排序同属一行。
-    expect(line?.contains(featured ?? null)).toBe(true)
     expect(line?.contains(sort ?? null)).toBe(true)
+    expect(line?.contains(chip(host, '甄选') ?? null)).toBe(false)
   })
 
   it('marks the clicked chip with an active colour class, not a hover-only cue', async () => {

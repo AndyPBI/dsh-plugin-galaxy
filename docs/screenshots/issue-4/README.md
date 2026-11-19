@@ -38,23 +38,26 @@ hover/按下变化，也没有声明 transition）。
 | 选中 | 透明底 / `rgb(15,17,21)` 文字 + 2px 下划线 | `rgb(15,17,21)` 实心底 / `rgb(255,255,255)` 文字 |
 | 选中 + hover | 同选中（无变化） | 同选中（无变化，无 transition） |
 
-## 2. 甄选：从状态 chip 行移到分类控件行
+## 2. 甄选：状态栏「全部」之后
+
+现场确认的位置是状态栏：**全部 / 甄选 / 已安装 / 推荐 / 可更新 / 不兼容**。本 PR 的早期版本曾把
+甄选移到分类控件行，收到反馈后改回状态栏第二项；下面是最终形态（同顺序、新 chip 样式）。
 
 | 之前（1044） | 之后（1044） |
 |---|---|
-| ![before: 甄选 between 全部 and 已安装](before-featured-1044.png) | ![after: 甄选 on the category line](after-featured-1044.png) |
-| 甄选读作第六种状态 chip，和「全部 / 已安装 / 推荐…」互斥关系混淆 | 甄选在「分类筛选」与「排序」之间，三者同一行；未选中时保留 hairline 边框表示可点 |
+| ![before: 甄选 second in the status row, underline tabs](before-featured-1044.png) | ![after: 甄选 second in the status row, chips restyled](after-featured-1044.png) |
+| 甄选本来就在状态行第二项，选中态是下划线 | 位置不变（全部、甄选、已安装、推荐、可更新、不兼容），点击态改为实心填充 |
 
 | 之前（420，宿主对话框真实宽度） | 之后（420） |
 |---|---|
 | ![before at 420](before-featured-420.png) | ![after at 420](after-featured-420.png) |
-| 甄选挤在状态行，分类与排序单独一行 | 分类框、甄选、排序同一行，不换行、不重叠、不出框 |
+| 同一顺序；分类与排序在下一行 | 顺序不变；分类框与排序仍同行、不重叠、不出框 |
 
-几何（CDP `getBoundingClientRect`）：
+分类与排序的几何（CDP `getBoundingClientRect`）：
 
 ```
-420px  after: 分类框 right=186   甄选 200–252   排序 left=266   right=398  ≤ 420
-380px  after: 分类框 right=146   甄选 160–212   排序 left=226   right=358  ≤ 380
+420px  after: 分类框 right=252   排序 left=266   right=398  ≤ 420
+380px  after: 分类框 right=212   排序 left=226   right=358  ≤ 380
 ```
 
 ## 3. 排序项

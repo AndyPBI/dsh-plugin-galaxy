@@ -597,12 +597,11 @@ function Toolbar(props: {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
   /*
    * The site's own front page lists every category as a chip with 「甄选」 pinned
-   * first. The panel keeps that shortcut visible, but it belongs to the CATEGORY
-   * controls: putting it in the status chip row made a category look like one of
-   * the mutually-exclusive states. It now sits on the 分类筛选 line, horizontally
-   * with the selector it shortcuts, which also keeps the click state (a filled
-   * chip) next to the control it explains. The selector still reaches the whole
-   * vocabulary.
+   * first. The field asked for that shortcut in the STATUS bar, second after
+   * 「全部」 (全部, 甄选, 已安装, 推荐, 可更新, 不兼容) — an earlier revision of this
+   * change had moved it next to 分类筛选 and was corrected on feedback. It stays
+   * a category toggle sharing state with the selector; selecting it marks the
+   * chip (filled) and 「全部」 steps back so the row shows one active entry.
    */
   const featured = categories?.[0]
   const selectedCategoryLabel = category === undefined || category === ''
@@ -638,21 +637,40 @@ function Toolbar(props: {
       </div>
       {filter !== undefined && onFilter !== undefined && (
         <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('filterLabel')}>
-          {FILTERS.map(entry => (
+          {FILTERS.slice(0, 1).map(entry => (
             <button
               key={entry.id}
               type="button"
-              /* The status row states the STATUS only. 「全部」 also clears the
-               * category when clicked (it is the "no filter" entry), but a
-               * category selection no longer has to blank this row's selected
-               * chip: the category shortcut has its own pressed state on the
-               * category line now. */
-              aria-pressed={filter === entry.id}
-              className={chip(filter === entry.id)}
+              /* 「全部」 is the "no filter" entry: it also clears the category, so
+               * it counts as selected only while neither a status nor a category
+               * narrows the listing. */
+              aria-pressed={filter === entry.id && (category === undefined || category === '')}
+              className={chip(filter === entry.id && (category === undefined || category === ''))}
               onClick={() => {
-                if (entry.id === 'all') onCategory?.('')
+                onCategory?.('')
                 onFilter(entry.id)
               }}
+            >
+              {t(entry.label)}
+            </button>
+          ))}
+          {featured !== undefined && onCategory !== undefined && category !== undefined && (
+            <button
+              type='button'
+              aria-pressed={category === featured.id}
+              className={chip(category === featured.id)}
+              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
+            >
+              {categoryEntryLabel(featured, props.english === true)}
+            </button>
+          )}
+          {FILTERS.slice(1).map(entry => (
+            <button
+              key={entry.id}
+              type="button"
+              aria-pressed={filter === entry.id}
+              className={chip(filter === entry.id)}
+              onClick={() => onFilter(entry.id)}
             >
               {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
             </button>
@@ -689,17 +707,6 @@ function Toolbar(props: {
             })}
           </select>
         </label>
-      )}
-      {featured !== undefined && category !== undefined && onCategory !== undefined && (
-        <button
-          type='button'
-          aria-pressed={category === featured.id}
-          className={`${chip(category === featured.id)} ${css.categoryQuick}`}
-          title={categoryEntryLabel(featured, props.english === true)}
-          onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
-        >
-          {categoryEntryLabel(featured, props.english === true)}
-        </button>
       )}
       {sort !== undefined && onSort !== undefined && (
         <label className={`${css.row} ${css.controlsFixed}`}>
