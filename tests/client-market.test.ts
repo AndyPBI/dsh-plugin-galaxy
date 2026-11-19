@@ -832,16 +832,19 @@ function selectOption(select: HTMLSelectElement, value: string): void {
 
 describe('Discover — the sort menu', () => {
   /**
-   * 「推荐」 is a VIEW, not a sort: the panel deliberately offers no
-   * "recommendation score" ordering (the score only ever appears on the badge and
-   * in the hover explanation). This guards the decision against a well-meaning
-   * re-addition — a dropdown entry there would compete with the chip that already
-   * renders the published ranking.
+   * The field removed the 名称 and npm 下载量 orderings and added 评分 (the
+   * catalog's composite recommendation score). Score is therefore an ORDERING
+   * now, not only a badge; the published recommendation WINDOW remains a
+   * separate view, so sorting by score never claims to be the site's rank.
+   *
+   * The catalog order is deliberately not the score order, and the star order
+   * is different from both, so each assertion below can only pass for the
+   * intended comparator.
    */
   const SCORED = [
     { key: 'a/aaa', name: 'aaa', owner: 'a', npm: 'aaa', url: 'https://github.com/a/aaa', category: 'dev', stars: 10, score: 70, band: 'A' },
-    { key: 'b/bbb', name: 'bbb', owner: 'b', npm: 'bbb', url: 'https://github.com/b/bbb', category: 'dev', stars: 90, score: 90, band: 'S' },
-    { key: 'c/ccc', name: 'ccc', owner: 'c', npm: 'ccc', url: 'https://github.com/c/ccc', category: 'dev', stars: 5, score: 70, band: 'A' },
+    { key: 'b/bbb', name: 'bbb', owner: 'b', npm: 'bbb', url: 'https://github.com/b/bbb', category: 'dev', stars: 5, score: 90, band: 'S' },
+    { key: 'c/ccc', name: 'ccc', owner: 'c', npm: 'ccc', url: 'https://github.com/c/ccc', category: 'dev', stars: 90, score: 60, band: 'B' },
   ]
 
   function installScoredStub(): void {
@@ -863,21 +866,42 @@ describe('Discover — the sort menu', () => {
     }) as typeof fetch
   }
 
-  it('offers no recommendation entry: score is a badge, not an ordering', async () => {
+  it('offers score, stars and release date — no name or download ordering', async () => {
     installScoredStub()
     const host = await mount()
     await flush()
 
     const select = host.querySelector('select') as HTMLSelectElement
     const values = [...select.options].map(entry => entry.value)
-    expect(values).toEqual(['name-asc', 'name-desc', 'stars-desc', 'stars-asc', 'downloads-desc', 'downloads-asc', 'added-desc', 'added-asc'])
-    expect([...select.options].map(entry => entry.textContent).join(' ')).not.toContain('score')
+    expect(values).toEqual(['score-desc', 'score-asc', 'stars-desc', 'stars-asc', 'added-desc', 'added-asc'])
+    const labels = [...select.options].map(entry => entry.textContent).join(' ')
+    expect(labels).toContain('Score')
+    expect(labels).not.toContain('Name')
+    expect(labels).not.toContain('downloads')
+    // 默认就是评分降序，市场先给出高分条目，而不是字母序。
+    expect(select.value).toBe('score-desc')
+    expect(cardTitles(host)).toEqual(['bbb', 'aaa', 'ccc'])
+  })
 
-    // 分数仍然只出现在徽章上（这正是它该在的地方）。
+  it('sorts by score in both directions', async () => {
+    installScoredStub()
+    const host = await mount()
+    await flush()
+
+    const select = host.querySelector('select') as HTMLSelectElement
+    selectOption(select, 'score-asc')
+    await flush()
+    expect(cardTitles(host)).toEqual(['ccc', 'aaa', 'bbb'])
+
+    // 分数仍然出现在徽章上（排序不取代解释）。
     expect(host.textContent ?? '').toContain('Ranked S · 90')
 
-    // 其余排序照常工作（删掉 score 分支后不能把菜单一起弄坏）。
+    // 其余排序照常工作（删掉旧字段后不能把菜单一起弄坏）。
     selectOption(select, 'stars-desc')
+    await flush()
+    expect(cardTitles(host)).toEqual(['ccc', 'aaa', 'bbb'])
+
+    selectOption(select, 'stars-asc')
     await flush()
     expect(cardTitles(host)).toEqual(['bbb', 'aaa', 'ccc'])
   })
@@ -1157,13 +1181,13 @@ describe('Discover — the category selector browses the site vocabulary', () =>
 
 describe('Discover — the featured category is a chip, and the controls share a line', () => {
   /**
-   * Two layout requirements from the field:
+   * Layout requirements from the field:
    *  1. the site's featured category (甄选, first in the published vocabulary)
-   *     must be visible WITHOUT opening a selector — the front page lists
-   *     categories as chips with 甄选 pinned first, so the panel promotes the
-   *     first vocabulary entry into the chip row right after 「全部」;
-   *  2. 「分类筛选」 and 「排序」 must sit on one line — a wrapping toolbar dropped
-   *     the category selector onto a line of its own at some widths.
+   *     is a shortcut in the STATUS bar, second after 「全部」:
+   *     全部, 甄选, 已安装, 推荐, 可更新, 不兼容;
+   *  2. 「分类筛选」 and 「排序」 share one non-wrapping line;
+   *  3. the clicked chip is marked by its own colour (a class the stylesheet
+   *     fills), so hover cannot be mistaken for the selection.
    */
   const ROWS = [
     { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12 },
@@ -1220,10 +1244,63 @@ describe('Discover — the featured category is a chip, and the controls share a
       .find(button => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined
   }
 
-  it('lists 甄选 second, right after 全部', async () => {
+  it('lists 甄选 second in the status row, right after 全部', async () => {
     const host = await mountIn('zh')
-    const labels = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
-    expect(labels.slice(0, 3)).toEqual(['全部', '甄选', '已安装'])
+    const statuses = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
+    // This stub ships no `ranking` block, so the recommendation entry renders
+    // its honest fallback name 「未安装」.
+    expect(statuses).toEqual(['全部', '甄选', '已安装', '未安装', '可更新', '不兼容'])
+
+    // 分类筛选与排序仍在同一行（甄选不占用这一行）。
+    const category = host.querySelector('select[aria-label="分类筛选"]')
+    const sort = host.querySelector('select[aria-label="排序"]')
+    const line = category?.closest('[class*="toolbarControlsLine"]')
+    expect(line).not.toBeNull()
+    expect(line?.contains(sort ?? null)).toBe(true)
+    expect(line?.contains(chip(host, '甄选') ?? null)).toBe(false)
+  })
+
+  it('marks the clicked chip with an active colour class, not a hover-only cue', async () => {
+    const host = await mountIn('zh')
+    const all = chip(host, '全部')
+    expect(all?.className).toContain('filterChipActive')
+
+    chip(host, '已安装')?.click()
+    await flush()
+    expect(chip(host, '已安装')?.className).toContain('filterChipActive')
+    expect(chip(host, '全部')?.className).not.toContain('filterChipActive')
+
+    // 甄选是同一个 chip 组件：选中时同样进入带色状态。
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(chip(host, '甄选')?.className).toContain('filterChipActive')
+  })
+
+  it('keeps the status row mutually exclusive (甄选 then 已安装, and back)', async () => {
+    /*
+     * Field regression: after picking 甄选 and then a status, both chips stayed
+     * highlighted because the category shortcut did not take part in the row's
+     * exclusivity. Each chip click must leave exactly one pressed entry.
+     */
+    const host = await mountIn('zh')
+    const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
+      .map(button => (button.textContent ?? '').trim())
+    const category = (): HTMLSelectElement => host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
+
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
+    expect(category().value).toBe('curated')
+
+    chip(host, '已安装')?.click()
+    await flush()
+    expect(pressed()).toEqual(['已安装'])
+    expect(category().value).toBe('')
+
+    // The other direction: picking 甄选 again must release the status.
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
   })
 
   it('localizes the featured chip and toggles the filter from it', async () => {

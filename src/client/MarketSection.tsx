@@ -162,17 +162,26 @@ class MutationAbandoned extends Error {
   }
 }
 
-type SortField = 'name' | 'stars' | 'downloads' | 'added'
+type SortField = 'score' | 'stars' | 'added'
 type SortDir = 'asc' | 'desc'
 type SortKey = `${SortField}-${SortDir}`
 
+/**
+ * The sort menu, in the order the panel offers it.
+ *
+ * Name and npm-download orderings were removed on request (they either repeated
+ * the card labels or measured something the panel does not rank by); the
+ * composite catalog score takes their place and is the default, so the market
+ * opens on its best entries instead of an alphabetical list. Score is a badge
+ * AND an ordering — the published recommendation WINDOW remains a separate view
+ * whose order is `ranking.top`, so a score sort here never pretends to be the
+ * site's rank.
+ */
 const SORTS = [
-  { id: 'name-asc', field: 'sortName', dir: 'sortAsc' },
-  { id: 'name-desc', field: 'sortName', dir: 'sortDesc' },
+  { id: 'score-desc', field: 'sortScore', dir: 'sortDesc' },
+  { id: 'score-asc', field: 'sortScore', dir: 'sortAsc' },
   { id: 'stars-desc', field: 'sortStars', dir: 'sortDesc' },
   { id: 'stars-asc', field: 'sortStars', dir: 'sortAsc' },
-  { id: 'downloads-desc', field: 'sortDownloads', dir: 'sortDesc' },
-  { id: 'downloads-asc', field: 'sortDownloads', dir: 'sortAsc' },
   { id: 'added-desc', field: 'sortAdded', dir: 'sortDesc' },
   { id: 'added-asc', field: 'sortAdded', dir: 'sortAsc' },
 ] as const satisfies ReadonlyArray<{ id: SortKey; field: string; dir: string }>
@@ -470,10 +479,9 @@ function compareRows(a: DiscoverRow, b: DiscoverRow, field: SortField, dir: Sort
     return Number.isNaN(parsed) ? 0 : parsed
   }
   switch (field) {
+    case 'score': return sign * (number(a.plugin.score) - number(b.plugin.score))
     case 'stars': return sign * (number(a.plugin.stars) - number(b.plugin.stars))
-    case 'downloads': return sign * (number(a.plugin.downloads) - number(b.plugin.downloads))
     case 'added': return sign * (date(a.plugin.added) - date(b.plugin.added))
-    default: return sign * a.plugin.name.localeCompare(b.plugin.name)
   }
 }
 
@@ -589,10 +597,11 @@ function Toolbar(props: {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
   /*
    * The site's own front page lists every category as a chip with 「甄选」 pinned
-   * first, so the panel promotes the FIRST published category to a chip right
-   * after 「全部」: the featured category is then visible without opening a
-   * selector, and the site can move the promotion by reordering its vocabulary.
-   * The selector still reaches the whole vocabulary.
+   * first. The field asked for that shortcut in the STATUS bar, second after
+   * 「全部」 (全部, 甄选, 已安装, 推荐, 可更新, 不兼容) — an earlier revision of this
+   * change had moved it next to 分类筛选 and was corrected on feedback. It stays
+   * a category toggle sharing state with the selector; selecting it marks the
+   * chip (filled) and 「全部」 steps back so the row shows one active entry.
    */
   const featured = categories?.[0]
   const selectedCategoryLabel = category === undefined || category === ''
@@ -601,7 +610,14 @@ function Toolbar(props: {
       const entry = categories?.find(candidate => candidate.id === category)
       return entry === undefined ? category : categoryEntryLabel(entry, props.english === true)
     })()
-  const chip = (active: boolean) => (active ? `${css.tab} ${css.tabActive}` : css.tab)
+  const chip = (active: boolean) => (active ? `${css.filterChip} ${css.filterChipActive}` : css.filterChip)
+  /*
+   * The status row is a mutually-exclusive group, 甄选 included. 「全部」 therefore
+   * stays selected while only a non-featured category narrows the listing (the
+   * status is still "all"); when the featured category is the active one, 甄选
+   * carries the selection and 全部 steps back.
+   */
+  const allActive = filter === 'all' && (featured === undefined || category !== featured.id)
   return (
     <div className={css.toolbar}>
       <div className={css.toolbarLine}>
@@ -632,8 +648,11 @@ function Toolbar(props: {
             <button
               key={entry.id}
               type="button"
-              aria-pressed={filter === entry.id && (category === undefined || category === '')}
-              className={chip(filter === entry.id && (category === undefined || category === ''))}
+              /* 「全部」 is the "no filter" entry: clicking it also clears the
+               * category. Its selected state follows the status alone, except
+               * while 甄选 owns the selection (see allActive). */
+              aria-pressed={allActive}
+              className={chip(allActive)}
               onClick={() => {
                 onCategory?.('')
                 onFilter(entry.id)
@@ -644,10 +663,20 @@ function Toolbar(props: {
           ))}
           {featured !== undefined && onCategory !== undefined && category !== undefined && (
             <button
-              type="button"
+              type='button'
               aria-pressed={category === featured.id}
               className={chip(category === featured.id)}
-              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
+              onClick={() => {
+                if (category === featured.id) {
+                  onCategory('')
+                  return
+                }
+                /* Every chip in this row is exclusive with the others: picking
+                 * 甄选 returns the status to 「全部」 so 「已安装」 (or any other
+                 * state) does not stay highlighted beside it. */
+                onFilter('all')
+                onCategory(featured.id)
+              }}
             >
               {categoryEntryLabel(featured, props.english === true)}
             </button>
@@ -658,7 +687,14 @@ function Toolbar(props: {
               type="button"
               aria-pressed={filter === entry.id}
               className={chip(filter === entry.id)}
-              onClick={() => onFilter(entry.id)}
+              onClick={() => {
+                /* Status chips are exclusive with 甄选: choosing a status clears
+                 * the category shortcut, so the row never shows two selected
+                 * entries. The category SELECTOR can still stack a filter (see
+                 * the contract), but a chip click means "show me this view". */
+                onCategory?.('')
+                onFilter(entry.id)
+              }}
             >
               {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
             </button>
@@ -1380,7 +1416,7 @@ export function MarketSection(props: {
   const [filter, setFilter] = useState<DiscoverFilter>(
     () => (tabFromPreferred(props.preferredSubsectionId) === 'installed' ? 'installed' : 'all'),
   )
-  const [sort, setSort] = useState<SortKey>('name-asc')
+  const [sort, setSort] = useState<SortKey>('score-desc')
   // '' = no category filter. Kept as a slug (not a label) because the site owns
   // the vocabulary and may relabel a category without changing its rows.
   const [category, setCategory] = useState('')

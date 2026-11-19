@@ -33,8 +33,8 @@ driven by two self-owned contracts — [`docs/implementation-contract.md`](docs/
 
 - **Discovery** — five state filters (all / recommended / installed / updatable / incompatible) over
   one card grid, plus a **category selector built from the catalog's own vocabulary** with the
-  featured category (「甄选」 / Featured) promoted to a chip next to 「全部」; search across name, npm
-  package, category label, description and author.
+  featured category (「甄选」 / Featured) promoted to a chip on the category-controls line, beside
+  the selector; search across name, npm package, category label, description and author.
 - **Recommended view** — the catalog's ranking (`ranking.top`, window 20), with `#1`, `#2`, … badges,
   S/A/B/C bands, a score breakdown tooltip and pinned editor picks.
 - **Lifecycle** — one-click install; enable/disable, update, uninstall, notes, groups, favorites,
