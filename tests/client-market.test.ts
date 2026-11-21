@@ -159,7 +159,9 @@ function cardTitles(host: HTMLElement): string[] {
 function clickChip(host: HTMLElement, label: string): void {
   for (const group of host.querySelectorAll('[role="group"]')) {
     const chip = [...group.querySelectorAll('button')]
-      .find(button => (button.textContent ?? '').trim() === label)
+      // The status entry's accessible name is the label alone; the count that
+      // rides beside it is decorative, so textContent is only the fallback.
+      .find(button => (button.getAttribute('aria-label') ?? (button.textContent ?? '').trim()) === label)
     if (chip !== undefined) {
       chip.click()
       return
@@ -1179,7 +1181,7 @@ describe('Discover — the category selector browses the site vocabulary', () =>
   })
 })
 
-describe('Discover — the featured category is a chip, and the controls share a line', () => {
+describe('Discover — one status slider, the featured category among its entries', () => {
   /**
    * Layout requirements from the field:
    *  1. the site's featured category (甄选, first in the published vocabulary)
@@ -1238,42 +1240,50 @@ describe('Discover — the featured category is a chip, and the controls share a
     return container
   }
 
-  /** The chip row, then the chip whose label matches. */
+  /** One slider entry, matched by its accessible name (the count is decorative). */
   function chip(host: HTMLElement, label: string): HTMLButtonElement | undefined {
     return [...host.querySelectorAll('button[aria-pressed]')]
-      .find(button => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined
+      .find(button => (button.getAttribute('aria-label') ?? (button.textContent ?? '').trim()) === label) as HTMLButtonElement | undefined
   }
 
-  it('lists 甄选 second in the status row, right after 全部', async () => {
+  it('lists 甄选 second in the status slider, right after 全部', async () => {
     const host = await mountIn('zh')
-    const statuses = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
+    const statuses = [...host.querySelectorAll('[class*="filterSlider"] button')]
+      .map(button => button.getAttribute('aria-label'))
     // This stub ships no `ranking` block, so the recommendation entry renders
     // its honest fallback name 「未安装」.
     expect(statuses).toEqual(['全部', '甄选', '已安装', '未安装', '可更新', '不兼容'])
 
-    // 分类筛选与排序仍在同一行（甄选不占用这一行）。
+    // The slider and both selects share ONE row: the slider replaces the chip
+    // line instead of adding a line of its own, which is where the reclaimed
+    // vertical space comes from.
+    const row = host.querySelector('[class*="toolbarFilters"]')
     const category = host.querySelector('select[aria-label="分类筛选"]')
     const sort = host.querySelector('select[aria-label="排序"]')
-    const line = category?.closest('[class*="toolbarControlsLine"]')
-    expect(line).not.toBeNull()
-    expect(line?.contains(sort ?? null)).toBe(true)
-    expect(line?.contains(chip(host, '甄选') ?? null)).toBe(false)
+    expect(row).not.toBeNull()
+    expect(row?.contains(category ?? null)).toBe(true)
+    expect(row?.contains(sort ?? null)).toBe(true)
+    expect(row?.contains(chip(host, '甄选') ?? null)).toBe(true)
   })
 
-  it('marks the clicked chip with an active colour class, not a hover-only cue', async () => {
+  it('shows the selection as one travelling thumb, not a repainted pill', async () => {
     const host = await mountIn('zh')
-    const all = chip(host, '全部')
-    expect(all?.className).toContain('filterChipActive')
+    const thumb = (): HTMLElement => host.querySelector('[class*="filterThumb"]') as HTMLElement
+    expect(chip(host, '全部')?.getAttribute('aria-pressed')).toBe('true')
+    expect(thumb().style.transform).toBe('translateX(0%)')
 
     chip(host, '已安装')?.click()
     await flush()
-    expect(chip(host, '已安装')?.className).toContain('filterChipActive')
-    expect(chip(host, '全部')?.className).not.toContain('filterChipActive')
+    expect(chip(host, '已安装')?.getAttribute('aria-pressed')).toBe('true')
+    expect(chip(host, '全部')?.getAttribute('aria-pressed')).toBe('false')
+    // 已安装 is the third entry (全部 · 甄选 · 已安装): the thumb lands on cell 2.
+    expect(thumb().style.transform).toBe('translateX(200%)')
 
-    // 甄选是同一个 chip 组件：选中时同样进入带色状态。
+    // 甄选 draws from the same range: the thumb tracks it as one object.
     chip(host, '甄选')?.click()
     await flush()
-    expect(chip(host, '甄选')?.className).toContain('filterChipActive')
+    expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('true')
+    expect(thumb().style.transform).toBe('translateX(100%)')
   })
 
   it('keeps the status row mutually exclusive (甄选 then 已安装, and back)', async () => {
@@ -1284,7 +1294,7 @@ describe('Discover — the featured category is a chip, and the controls share a
      */
     const host = await mountIn('zh')
     const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
-      .map(button => (button.textContent ?? '').trim())
+      .map(button => button.getAttribute('aria-label') ?? (button.textContent ?? '').trim())
     const category = (): HTMLSelectElement => host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
 
     chip(host, '甄选')?.click()
@@ -1329,17 +1339,18 @@ describe('Discover — the featured category is a chip, and the controls share a
     expect((host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement).value).toBe('')
   })
 
-  it('puts 分类筛选 and 排序 on one non-wrapping line', async () => {
+  it('puts the slider, 分类筛选 and 排序 on one row', async () => {
     const host = await mountIn('zh')
     const category = host.querySelector('select[aria-label="分类筛选"]')
     const sort = host.querySelector('select[aria-label="排序"]') ?? host.querySelector('select[aria-label="Sort"]')
     expect(category).not.toBeNull()
     expect(sort).not.toBeNull()
-    // Same container, and that container is the one that must not wrap.
-    const line = category?.closest('[class*="toolbarControlsLine"]')
-    expect(line).not.toBeNull()
-    expect(line?.contains(sort)).toBe(true)
-    expect(line?.className).toContain('toolbarControlsLine')
+    // Same row, and that row is the one that carries the slider too. It wraps
+    // below the container breakpoint rather than overflowing.
+    const row = category?.closest('[class*="toolbarFilters"]')
+    expect(row).not.toBeNull()
+    expect(row?.contains(sort)).toBe(true)
+    expect(row?.contains(host.querySelector('[class*="filterSlider"]'))).toBe(true)
   })
 })
 

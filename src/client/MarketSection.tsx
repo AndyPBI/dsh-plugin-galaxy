@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 // Icons come from the runtime resolver: the host renamed every glyph in 0.2.x
 // (size suffix → weight suffix), so a static name would be gone on one of them.
@@ -592,6 +592,12 @@ function Toolbar(props: {
   categoryCounts?: ReadonlyMap<string, number>
   /** Whether the English labels apply to the category options. */
   english?: boolean
+  /**
+   * How many rows the two actionable statuses hold, shown inside their segments:
+   * the reason to pick 已安装 or 可更新, before the click. Counted over the whole
+   * inventory, never over the search-narrowed rows.
+   */
+  filterCounts?: { installed?: number; update?: number }
   children?: ReactNode
 }) {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
@@ -610,7 +616,19 @@ function Toolbar(props: {
       const entry = categories?.find(candidate => candidate.id === category)
       return entry === undefined ? category : categoryEntryLabel(entry, props.english === true)
     })()
-  const chip = (active: boolean) => (active ? `${css.filterChip} ${css.filterChipActive}` : css.filterChip)
+  /*
+   * The status row is one slider, not a row of chips: the selection is a single
+   * thumb that travels, so the eye follows one object instead of repainting six
+   * pills. Every entry stays mutually exclusive — a status clears the category,
+   * and 甄选 returns the status to 「全部」.
+   */
+  const sliderEntries: {
+    key: string
+    label: string
+    active: boolean
+    count?: number
+    onClick: () => void
+  }[] = []
   /*
    * The status row is a mutually-exclusive group, 甄选 included. 「全部」 therefore
    * stays selected while only a non-featured category narrows the listing (the
@@ -618,6 +636,48 @@ function Toolbar(props: {
    * carries the selection and 全部 steps back.
    */
   const allActive = filter === 'all' && (featured === undefined || category !== featured.id)
+  const featuredActive = featured !== undefined && category === featured.id
+  if (filter !== undefined && onFilter !== undefined) {
+    sliderEntries.push({
+      key: 'all',
+      label: t('filterAll'),
+      active: allActive,
+      onClick: () => {
+        onCategory?.('')
+        onFilter('all')
+      },
+    })
+    if (featured !== undefined && onCategory !== undefined && category !== undefined) {
+      sliderEntries.push({
+        key: 'featured',
+        label: categoryEntryLabel(featured, props.english === true),
+        active: featuredActive,
+        onClick: () => {
+          if (featuredActive) {
+            onCategory('')
+            return
+          }
+          onFilter('all')
+          onCategory(featured.id)
+        },
+      })
+    }
+    for (const entry of FILTERS.slice(1)) {
+      sliderEntries.push({
+        key: entry.id,
+        label: 'fallbackLabel' in entry && recommended !== true ? t(entry.fallbackLabel) : t(entry.label),
+        active: filter === entry.id,
+        count: entry.id === 'installed'
+          ? props.filterCounts?.installed
+          : entry.id === 'update-available' ? props.filterCounts?.update : undefined,
+        onClick: () => {
+          onCategory?.('')
+          onFilter(entry.id)
+        },
+      })
+    }
+  }
+  const activeIndex = Math.max(0, sliderEntries.findIndex(item => item.active))
   return (
     <div className={css.toolbar}>
       <div className={css.toolbarLine}>
@@ -642,114 +702,78 @@ function Toolbar(props: {
           {t('reload')}
         </Button>
       </div>
-      {filter !== undefined && onFilter !== undefined && (
-        <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('filterLabel')}>
-          {FILTERS.slice(0, 1).map(entry => (
-            <button
-              key={entry.id}
-              type="button"
-              /* 「全部」 is the "no filter" entry: clicking it also clears the
-               * category. Its selected state follows the status alone, except
-               * while 甄选 owns the selection (see allActive). */
-              aria-pressed={allActive}
-              className={chip(allActive)}
-              onClick={() => {
-                onCategory?.('')
-                onFilter(entry.id)
-              }}
+      {(filter !== undefined && onFilter !== undefined) || category !== undefined || sort !== undefined ? (
+        <div className={`${css.toolbarLine} ${css.toolbarFilters}`} role='group' aria-label={t('filterLabel')}>
+          {filter !== undefined && onFilter !== undefined && (
+            <div
+              className={css.filterSlider}
+              style={{ ['--n' as string]: sliderEntries.length } as CSSProperties}
             >
-              {t(entry.label)}
-            </button>
-          ))}
-          {featured !== undefined && onCategory !== undefined && category !== undefined && (
-            <button
-              type='button'
-              aria-pressed={category === featured.id}
-              className={chip(category === featured.id)}
-              onClick={() => {
-                if (category === featured.id) {
-                  onCategory('')
-                  return
-                }
-                /* Every chip in this row is exclusive with the others: picking
-                 * 甄选 returns the status to 「全部」 so 「已安装」 (or any other
-                 * state) does not stay highlighted beside it. */
-                onFilter('all')
-                onCategory(featured.id)
-              }}
-            >
-              {categoryEntryLabel(featured, props.english === true)}
-            </button>
+              <span
+                className={css.filterThumb}
+                style={{ transform: `translateX(${activeIndex * 100}%)` }}
+                aria-hidden='true'
+              />
+              {sliderEntries.map(item => (
+                <button
+                  key={item.key}
+                  type='button'
+                  aria-pressed={item.active}
+                  /* The count is decorative: the segment's name is the status,
+                     never "已安装 12", so the accessible name stays the label. */
+                  aria-label={item.label}
+                  className={css.filterItem}
+                  onClick={item.onClick}
+                >
+                  <span className={css.filterItemLabel}>{item.label}</span>
+                  {item.count !== undefined && (
+                    <span className={css.filterCount} aria-hidden='true'>{item.count}</span>
+                  )}
+                </button>
+              ))}
+            </div>
           )}
-          {FILTERS.slice(1).map(entry => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-pressed={filter === entry.id}
-              className={chip(filter === entry.id)}
-              onClick={() => {
-                /* Status chips are exclusive with 甄选: choosing a status clears
-                 * the category shortcut, so the row never shows two selected
-                 * entries. The category SELECTOR can still stack a filter (see
-                 * the contract), but a chip click means "show me this view". */
-                onCategory?.('')
-                onFilter(entry.id)
-              }}
-            >
-              {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
-            </button>
-          ))}
+          <span className={css.spacer} />
+          {category !== undefined && onCategory !== undefined && categories !== undefined && categories.length > 0 && (
+            <label className={`${css.row} ${css.controlsGrow}`}>
+              <select
+                className={`${css.select} ${css.categorySelect}`}
+                value={category}
+                aria-label={t('categoryFilterLabel')}
+                title={selectedCategoryLabel ?? t('allCategories')}
+                onChange={event => onCategory(event.target.value)}
+              >
+                <option value=''>{t('allCategories')}</option>
+                {categories.map(entry => {
+                  const label = categoryEntryLabel(entry, props.english === true)
+                  const count = categoryCounts?.get(entry.id)
+                  return (
+                    <option key={entry.id} value={entry.id}>
+                      {count === undefined ? label : `${label} (${String(count)})`}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+          )}
+          {sort !== undefined && onSort !== undefined && (
+            <label className={`${css.row} ${css.controlsFixed}`}>
+              <select
+                className={css.select}
+                value={sort}
+                aria-label={t('sortLabel')}
+                onChange={event => onSort(event.target.value as SortKey)}
+              >
+                {SORTS.map(entry => (
+                  <option key={entry.id} value={entry.id}>
+                    {`${t(entry.field)} · ${t(entry.dir)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
-      )}
-      <div className={css.toolbarControlsLine}>
-      {/*
-        * The category selector is driven by the catalog's own vocabulary, in the
-        * site's order (curated first): the panel never invents a category list, so
-        * a category the site adds appears here without a plugin release.
-        */}
-      {category !== undefined && onCategory !== undefined && categories !== undefined && categories.length > 0 && (
-        <label className={`${css.row} ${css.controlsGrow}`}>
-          <span className={css.muted}>{t('categoryFilterLabel')}</span>
-          <select
-            className={`${css.select} ${css.categorySelect}`}
-            value={category}
-            aria-label={t('categoryFilterLabel')}
-            /* The closed control may ellipsize a long label; the tooltip keeps the
-             * full text reachable without widening the row. */
-            title={selectedCategoryLabel ?? t('allCategories')}
-            onChange={event => onCategory(event.target.value)}
-          >
-            <option value=''>{t('allCategories')}</option>
-            {categories.map(entry => {
-              const label = categoryEntryLabel(entry, props.english === true)
-              const count = categoryCounts?.get(entry.id)
-              return (
-                <option key={entry.id} value={entry.id}>
-                  {count === undefined ? label : `${label} (${String(count)})`}
-                </option>
-              )
-            })}
-          </select>
-        </label>
-      )}
-      {sort !== undefined && onSort !== undefined && (
-        <label className={`${css.row} ${css.controlsFixed}`}>
-          <span className={css.muted}>{t('sortLabel')}</span>
-          <select
-            className={css.select}
-            value={sort}
-            aria-label={t('sortLabel')}
-            onChange={event => onSort(event.target.value as SortKey)}
-          >
-            {SORTS.map(entry => (
-              <option key={entry.id} value={entry.id}>
-                {`${t(entry.field)} · ${t(entry.dir)}`}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -2073,6 +2097,20 @@ export function MarketSection(props: {
       .sort((left, right) => left.name.localeCompare(right.name))
   }, [inventory, discoverQuery])
 
+  /**
+   * The two counts the slider shows inside its segments. Counted over the whole
+   * inventory: `installedRows` above is narrowed by the search box, so a count
+   * taken from it would shrink as someone types, which is not what the number
+   * claims to be.
+   */
+  const statusCounts = useMemo(() => {
+    const installed = inventory?.installed ?? []
+    return {
+      installed: installed.length,
+      update: installed.filter(plugin => updates[plugin.name]?.updateAvailable === true).length,
+    }
+  }, [inventory, updates])
+
   const favoriteRows = useMemo(() => {
     const query = favoritesQuery.trim().toLowerCase()
     return (inventory?.favorites ?? [])
@@ -2254,6 +2292,7 @@ export function MarketSection(props: {
             onCategory={setCategory}
             categories={registry?.categories}
             categoryCounts={countsByCategory}
+            filterCounts={statusCounts}
             english={english}
           />
           {registryLoading && registry === null && (

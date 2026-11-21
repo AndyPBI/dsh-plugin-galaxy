@@ -47,42 +47,85 @@
  *
  * Colour comes from the host's semantic aliases (accent + its foreground), so
  * light and dark both keep the same contrast without a second literal. */
-.filterChip{
-  border:1px solid transparent;
+/* The status row is one slider, not a row of chips: the selection is a single
+ * thumb that travels, so the eye follows one object instead of six pills that
+ * repaint in place. Every entry stays mutually exclusive (a status clears the
+ * category, 甄选 returns the status to 「全部」), which is what lets one thumb
+ * stand for all of them. */
+.filterSlider{
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(var(--n),minmax(0,1fr));
+  flex:0 1 520px;
+  min-width:0;
+  padding:2px;
+  border-radius:999px;
+  background:var(--dsw-alias-interactive-bg-hover,var(--dsh-bg-secondary,#f1f2f4));
+}
+.filterThumb{
+  position:absolute;
+  top:2px;
+  bottom:2px;
+  left:2px;
+  width:calc((100% - 4px)/var(--n));
+  border-radius:999px;
+  background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
+  box-shadow:0 1px 3px rgba(17,19,26,.3);
+  transition:transform .3s cubic-bezier(.22,1,.36,1);
+}
+.filterItem{
+  position:relative;
+  display:inline-flex;
+  align-items:baseline;
+  justify-content:center;
+  gap:4px;
+  height:30px;
+  padding:0 6px;
+  border:0;
   background:transparent;
   font:inherit;
   font-size:13px;
-  line-height:18px;
+  font-weight:500;
   color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));
-  padding:4px 12px;
   border-radius:999px;
   cursor:pointer;
   white-space:nowrap;
+  transition:color .2s ease;
 }
-.filterChip:hover:not(.filterChipActive){
-  background:var(--dsw-alias-interactive-bg-hover,var(--dsh-bg-secondary,#f0f2f5));
+.filterItem:hover:not([aria-pressed='true']){
   color:var(--dsh-text-primary,var(--dsw-alias-label-primary,#1f2328));
 }
-.filterChip:active:not(.filterChipActive){
-  background:var(--dsw-alias-interactive-bg-active,var(--dsh-bg-secondary,#e6e9ef));
-}
-.filterChip:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:2px}
-.filterChipActive,.filterChipActive:hover,.filterChipActive:active{
-  background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
-  border-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
+.filterItem:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:2px}
+.filterItem[aria-pressed='true']{
   color:var(--dsw-alias-label-primary-foreground,#fff);
   font-weight:600;
 }
+.filterItemLabel{white-space:nowrap}
+.filterCount{
+  font-size:11px;
+  font-weight:500;
+  color:color-mix(in srgb,currentColor 58%,transparent);
+}
+.filterItem[aria-pressed='true'] .filterCount{
+  color:color-mix(in srgb,currentColor 74%,transparent);
+}
+/* The slider and the two selects share a line; below 760px the slider takes the
+   line to itself, the selects wrap under it, and the counts go — six equal cells
+   plus two digits do not fit, and the count is the reason to pick a segment, not
+   its label. */
+.toolbarFilters{flex-wrap:wrap;row-gap:8px;container-type:inline-size}
+@container (max-width:760px){
+  .filterSlider{flex:1 1 100%}
+  .filterCount{display:none}
+  .filterItem{font-size:12px;padding:0 2px}
+}
 
-/* Three deliberate lines instead of one wrapping row: search, the status chips
- * (including the 甄选 shortcut, second after 「全部」), then the 分类筛选 + 排序
- * controls. A wrapping flex row dropped the controls onto a line of their own at
- * some widths, which is what "keep them on the same line" rules out. */
+/* Two deliberate lines instead of one wrapping row: search, then the status
+ * slider with the 分类筛选 + 排序 selects beside it. Their inline labels are gone
+ * — both selects are self-describing (「全部分类」, 「评分 · 降序」) — which is what
+ * buys the second line back for the grid. */
 .toolbar{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px 0}
 .toolbarLine{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
-/* Chips may outgrow the dialog once the site adds categories; scroll rather than
- * wrap so the row height stays predictable. */
-.chipLine{overflow-x:auto;padding:2px 2px 4px}
 .toolbarControlsLine{display:flex;align-items:center;gap:14px;flex-wrap:nowrap;white-space:nowrap;min-width:0}
 /* The category control carries the site's whole vocabulary, including labels like
  * 服务与交易（客服 / 订阅 / 开票 / 支付）: at its intrinsic width (a flex item's
