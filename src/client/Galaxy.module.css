@@ -54,10 +54,12 @@
  * stand for all of them. */
 .filterSlider{
   position:relative;
-  display:grid;
-  grid-template-columns:repeat(var(--n),minmax(0,1fr));
-  flex:0 1 520px;
-  min-width:0;
+  /* Sized by its own segments, not by a share of the row: every pill then keeps
+     the same padding around its label, which is what makes the run of them read
+     as one control instead of six boxes of air. */
+  display:flex;
+  gap:2px;
+  flex:0 0 auto;
   padding:2px;
   border-radius:999px;
   background:var(--dsw-alias-interactive-bg-hover,var(--dsh-bg-secondary,#f1f2f4));
@@ -66,12 +68,12 @@
   position:absolute;
   top:2px;
   bottom:2px;
-  left:2px;
-  width:calc((100% - 4px)/var(--n));
   border-radius:999px;
   background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
   box-shadow:0 1px 3px rgba(17,19,26,.3);
-  transition:transform .3s cubic-bezier(.22,1,.36,1);
+  /* Positioned from the active segment's measured box; both edges ease, so the
+     thumb stretches between two widths of different labels instead of snapping. */
+  transition:left .3s cubic-bezier(.22,1,.36,1),width .3s cubic-bezier(.22,1,.36,1),opacity .15s ease;
 }
 .filterItem{
   position:relative;
@@ -115,9 +117,11 @@
    its label. */
 .toolbarFilters{flex-wrap:wrap;row-gap:8px;container-type:inline-size}
 @container (max-width:760px){
-  .filterSlider{flex:1 1 100%}
+  /* The track takes the line to itself and may scroll; the counts go, because a
+     six-way run plus two digits no longer fits one line. */
+  .filterSlider{flex:1 1 100%;overflow-x:auto}
   .filterCount{display:none}
-  .filterItem{font-size:12px;padding:0 2px}
+  .filterItem{font-size:12px;padding:0 8px}
 }
 
 /* Two deliberate lines instead of one wrapping row: search, then the status

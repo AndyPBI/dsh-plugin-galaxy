@@ -9,8 +9,8 @@
  * mutations are the only things that talk to the server.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { ReactNode } from 'react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 // Icons come from the runtime resolver: the host renamed every glyph in 0.2.x
 // (size suffix → weight suffix), so a static name would be gone on one of them.
@@ -602,6 +602,15 @@ function Toolbar(props: {
 }) {
   const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
   /*
+   * The thumb is measured, not computed from an index: the segments are sized by
+   * their own labels (an equal split leaves 「全部」 floating in a wide cell while
+   * 「已安装 8」 is cramped), so the only honest way to know where the selection
+   * sits is to ask the DOM. A ResizeObserver keeps it right when the row reflows,
+   * the language changes or the catalog adds a category.
+   */
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null)
+  /*
    * The site's own front page lists every category as a chip with 「甄选」 pinned
    * first. The field asked for that shortcut in the STATUS bar, second after
    * 「全部」 (全部, 甄选, 已安装, 推荐, 可更新, 不兼容) — an earlier revision of this
@@ -637,6 +646,20 @@ function Toolbar(props: {
    */
   const allActive = filter === 'all' && (featured === undefined || category !== featured.id)
   const featuredActive = featured !== undefined && category === featured.id
+  useLayoutEffect(() => {
+    const track = trackRef.current
+    if (track === null) return
+    const measure = (): void => {
+      const active = track.querySelector<HTMLElement>('[aria-pressed="true"]')
+      setThumb(active === null ? null : { left: active.offsetLeft, width: active.offsetWidth })
+    }
+    measure()
+    // jsdom has no ResizeObserver; the initial measure still runs there.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(track)
+    return () => { observer?.disconnect() }
+  }, [filter, category, props.english, recommended])
+
   if (filter !== undefined && onFilter !== undefined) {
     sliderEntries.push({
       key: 'all',
@@ -677,7 +700,6 @@ function Toolbar(props: {
       })
     }
   }
-  const activeIndex = Math.max(0, sliderEntries.findIndex(item => item.active))
   return (
     <div className={css.toolbar}>
       <div className={css.toolbarLine}>
@@ -705,13 +727,12 @@ function Toolbar(props: {
       {(filter !== undefined && onFilter !== undefined) || category !== undefined || sort !== undefined ? (
         <div className={`${css.toolbarLine} ${css.toolbarFilters}`} role='group' aria-label={t('filterLabel')}>
           {filter !== undefined && onFilter !== undefined && (
-            <div
-              className={css.filterSlider}
-              style={{ ['--n' as string]: sliderEntries.length } as CSSProperties}
-            >
+            <div className={css.filterSlider} ref={trackRef}>
               <span
                 className={css.filterThumb}
-                style={{ transform: `translateX(${activeIndex * 100}%)` }}
+                /* Before the first measurement it is invisible rather than parked
+                   at the left edge, so no frame shows it jumping into place. */
+                style={thumb === null ? { opacity: 0 } : { left: thumb.left, width: thumb.width }}
                 aria-hidden='true'
               />
               {sliderEntries.map(item => (

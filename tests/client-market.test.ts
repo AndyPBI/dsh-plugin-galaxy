@@ -1266,24 +1266,32 @@ describe('Discover — one status slider, the featured category among its entrie
     expect(row?.contains(chip(host, '甄选') ?? null)).toBe(true)
   })
 
-  it('shows the selection as one travelling thumb, not a repainted pill', async () => {
+  it('marks exactly one entry selected, and positions the thumb from it', async () => {
+    /*
+     * Geometry is not asserted here: jsdom has no layout, so offsetLeft and
+     * offsetWidth are 0 for every segment and the measured thumb is 0×0. What
+     * this test can hold is the contract around it — one pressed entry, a thumb
+     * element that exists and is no longer hidden, and an accessible name that
+     * stays the status. The screenshots harness covers the real geometry.
+     */
     const host = await mountIn('zh')
+    const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
+      .map(button => button.getAttribute('aria-label') ?? '')
     const thumb = (): HTMLElement => host.querySelector('[class*="filterThumb"]') as HTMLElement
-    expect(chip(host, '全部')?.getAttribute('aria-pressed')).toBe('true')
-    expect(thumb().style.transform).toBe('translateX(0%)')
+
+    expect(pressed()).toEqual(['全部'])
+    expect(thumb()).not.toBeNull()
+    expect(thumb().style.opacity).not.toBe('0')
 
     chip(host, '已安装')?.click()
     await flush()
-    expect(chip(host, '已安装')?.getAttribute('aria-pressed')).toBe('true')
-    expect(chip(host, '全部')?.getAttribute('aria-pressed')).toBe('false')
-    // 已安装 is the third entry (全部 · 甄选 · 已安装): the thumb lands on cell 2.
-    expect(thumb().style.transform).toBe('translateX(200%)')
+    expect(pressed()).toEqual(['已安装'])
+    // The count rides beside the label but never enters the name.
+    expect(chip(host, '已安装')?.textContent).not.toBe('已安装')
 
-    // 甄选 draws from the same range: the thumb tracks it as one object.
     chip(host, '甄选')?.click()
     await flush()
-    expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('true')
-    expect(thumb().style.transform).toBe('translateX(100%)')
+    expect(pressed()).toEqual(['甄选'])
   })
 
   it('keeps the status row mutually exclusive (甄选 then 已安装, and back)', async () => {
