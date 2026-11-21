@@ -255,11 +255,12 @@ describe('Discover — installed filter corresponds to the inventory', () => {
     expect(text).not.toContain('lemoncat7')
   })
 
-  it('reports the installed total in the count line', async () => {
+  it('starts the grid without a result-count line', async () => {
+    // The「{n} 个插件」 count was removed so the cards begin directly under the
+    // toolbar. The recommendation caveat still prints, but this plain view has
+    // no counter left.
     const host = await mount()
-    clickChip(host, 'Installed')
-    await flush()
-    expect(host.textContent).toContain(String(INSTALLED.length))
+    expect(host.textContent ?? '').not.toMatch(/\d+\s*个插件/u)
   })
 
   it('offers lifecycle actions rather than "install" for an installed plugin', async () => {
@@ -1060,11 +1061,11 @@ describe('Discover — category labels follow the catalog', () => {
   })
 })
 
-describe('Discover — the category selector browses the site vocabulary', () => {
+describe('Discover — the featured category browses the site vocabulary', () => {
   /**
-   * The badge alone was not enough: 「甄选」 had to be *browsable*, and the option
-   * list must come from the catalog (order and labels included) so a category the
-   * site adds appears without a plugin release.
+   * The category dropdown is gone from the toolbar; the site's featured category
+   * (「甄选」, first in the published vocabulary) remains browsable through its
+   * chip. Its label comes from the catalog, so a site-side rename still shows.
    */
   const ROWS = [
     { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12, description: '地图式知识整理' },
@@ -1127,57 +1128,34 @@ describe('Discover — the category selector browses the site vocabulary', () =>
     return container
   }
 
-  function categorySelect(host: HTMLElement, label: string): HTMLSelectElement {
-    return host.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement
+  /** The featured-category chip is the one browsable category entry left. */
+  function featuredChip(host: HTMLElement): HTMLButtonElement | undefined {
+    return [...host.querySelectorAll('button[aria-pressed]')]
+      .find(button => (button.getAttribute('aria-label') ?? '') === '甄选') as HTMLButtonElement | undefined
   }
 
-  it('offers every published category, in the site order, with live counts', async () => {
+  it('shows only the featured category once selected, and releases it on a second click', async () => {
     const host = await mountIn('zh')
-    const select = categorySelect(host, '分类筛选')
-    expect(select).toBeDefined()
-    expect([...select.options].map(option => option.textContent)).toEqual(['全部分类', '甄选 (1)', '费用与额度 (1)'])
-    expect(select.value).toBe('')
-  })
-
-  it('localizes the options with the host locale', async () => {
-    const host = await mountIn('en')
-    const select = categorySelect(host, 'Category filter')
-    expect([...select.options].map(option => option.textContent)).toEqual(['All categories', 'Featured (1)', 'Cost (1)'])
-  })
-
-  it('shows only that category\'s plugins once selected', async () => {
-    const host = await mountIn('zh')
-    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    featuredChip(host)?.click()
     await flush()
     expect(cardTitles(host)).toEqual(['dsh-atlas'])
-    // The row whose slug is not in the vocabulary is still reachable under 全部.
-    selectOption(categorySelect(host, '分类筛选'), '')
+    // The chip is a toggle; the row whose slug is not in the vocabulary is still
+    // reachable under 全部 once the category is released.
+    featuredChip(host)?.click()
     await flush()
     expect(cardTitles(host).length).toBe(3)
   })
 
-  it('composes with the search box', async () => {
+  it('composes the featured category with the search box and explains an empty result', async () => {
     const host = await mountIn('zh')
-    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    featuredChip(host)?.click()
     await flush()
     const input = [...host.querySelectorAll('input')]
       .find(element => (element.getAttribute('aria-label') ?? '').startsWith('搜索')) as HTMLInputElement
     typeInto(input, '花销')
     await flush()
     expect(cardTitles(host)).toEqual([])
-  })
-
-  it('explains an empty category instead of looking broken', async () => {
-    // 「推荐」 is the fixed ranking (one scored row); the curated row is not on it,
-    // so the combination is honestly empty and the hint says how to see it.
-    const host = await mountIn('zh', true)
-    clickChip(host, '推荐')
-    await flush()
-    selectOption(categorySelect(host, '分类筛选'), 'curated')
-    await flush()
-    expect(cardTitles(host)).toEqual([])
     expect(host.textContent).toContain('该分类下没有可显示的条目')
-    expect(host.textContent).toContain('切到「全部」')
   })
 })
 
@@ -1187,7 +1165,7 @@ describe('Discover — one status slider, the featured category among its entrie
    *  1. the site's featured category (甄选, first in the published vocabulary)
    *     is a shortcut in the STATUS bar, second after 「全部」:
    *     全部, 甄选, 已安装, 推荐, 可更新, 不兼容;
-   *  2. 「分类筛选」 and 「排序」 share one non-wrapping line;
+   *  2. 「排序」 shares the status slider's line (the category dropdown is gone);
    *  3. the clicked chip is marked by its own colour (a class the stylesheet
    *     fills), so hover cannot be mistaken for the selection.
    */
@@ -1254,16 +1232,15 @@ describe('Discover — one status slider, the featured category among its entrie
     // its honest fallback name 「未安装」.
     expect(statuses).toEqual(['全部', '甄选', '已安装', '未安装', '可更新', '不兼容'])
 
-    // The slider and both selects share ONE row: the slider replaces the chip
-    // line instead of adding a line of its own, which is where the reclaimed
-    // vertical space comes from.
+    // The slider and the remaining select share ONE row: the slider replaces the
+    // chip line instead of adding a line of its own, which is where the reclaimed
+    // vertical space comes from. The category dropdown is deliberately absent.
     const row = host.querySelector('[class*="toolbarFilters"]')
-    const category = host.querySelector('select[aria-label="分类筛选"]')
     const sort = host.querySelector('select[aria-label="排序"]')
     expect(row).not.toBeNull()
-    expect(row?.contains(category ?? null)).toBe(true)
     expect(row?.contains(sort ?? null)).toBe(true)
     expect(row?.contains(chip(host, '甄选') ?? null)).toBe(true)
+    expect(host.querySelector('select[aria-label="分类筛选"]')).toBeNull()
   })
 
   it('marks exactly one entry selected, and positions the thumb from it', async () => {
@@ -1286,8 +1263,8 @@ describe('Discover — one status slider, the featured category among its entrie
     chip(host, '已安装')?.click()
     await flush()
     expect(pressed()).toEqual(['已安装'])
-    // The count rides beside the label but never enters the name.
-    expect(chip(host, '已安装')?.textContent).not.toBe('已安装')
+    // The segment is the label alone; the filter counts were removed.
+    expect(chip(host, '已安装')?.textContent).toBe('已安装')
 
     chip(host, '甄选')?.click()
     await flush()
@@ -1303,17 +1280,14 @@ describe('Discover — one status slider, the featured category among its entrie
     const host = await mountIn('zh')
     const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
       .map(button => button.getAttribute('aria-label') ?? (button.textContent ?? '').trim())
-    const category = (): HTMLSelectElement => host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
 
     chip(host, '甄选')?.click()
     await flush()
     expect(pressed()).toEqual(['甄选'])
-    expect(category().value).toBe('curated')
 
     chip(host, '已安装')?.click()
     await flush()
     expect(pressed()).toEqual(['已安装'])
-    expect(category().value).toBe('')
 
     // The other direction: picking 甄选 again must release the status.
     chip(host, '甄选')?.click()
@@ -1335,29 +1309,27 @@ describe('Discover — one status slider, the featured category among its entrie
     expect(cardTitles(host).length).toBe(2)
   })
 
-  it('keeps the chip and the selector in sync', async () => {
+  it('clears the featured category from the 全部 chip', async () => {
     const host = await mountIn('zh')
-    const select = host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
-    selectOption(select, 'curated')
+    chip(host, '甄选')?.click()
     await flush()
     expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('true')
     // 「全部」 clears the category too — it is the "no filter" entry.
     chip(host, '全部')?.click()
     await flush()
-    expect((host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement).value).toBe('')
+    expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('false')
+    expect(cardTitles(host).length).toBe(2)
   })
 
-  it('puts the slider, 分类筛选 and 排序 on one row', async () => {
+  it('puts the slider and 排序 on the filter row, with no category dropdown', async () => {
     const host = await mountIn('zh')
-    const category = host.querySelector('select[aria-label="分类筛选"]')
     const sort = host.querySelector('select[aria-label="排序"]') ?? host.querySelector('select[aria-label="Sort"]')
-    expect(category).not.toBeNull()
     expect(sort).not.toBeNull()
+    expect(host.querySelector('select[aria-label="分类筛选"]')).toBeNull()
     // Same row, and that row is the one that carries the slider too. It wraps
     // below the container breakpoint rather than overflowing.
-    const row = category?.closest('[class*="toolbarFilters"]')
+    const row = sort?.closest('[class*="toolbarFilters"]')
     expect(row).not.toBeNull()
-    expect(row?.contains(sort)).toBe(true)
     expect(row?.contains(host.querySelector('[class*="filterSlider"]'))).toBe(true)
   })
 })

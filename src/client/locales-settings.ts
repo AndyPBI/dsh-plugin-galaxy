@@ -211,7 +211,8 @@ export const settingsZh: Dict = {
   opApproveBuilds: '放行构建脚本并重试',
   opApproveBuildsHint: 'pnpm 拦截了这些依赖的构建脚本',
   opSetupPnpm: '一键安装 pnpm',
-  opNeedsRefresh: '刷新页面后才能看到这次变更。',
+  opNeedsRefresh: '刷新页面或重启宿主后才能看到这次变更。',
+  opInterrupted: '宿主在执行该操作时重启，操作可能未完成。',
 
   /* diagnostics ——— */
   diagTitle: '诊断',
@@ -492,7 +493,8 @@ export const settingsEn: Dict = {
   opApproveBuilds: 'Allow build scripts and retry',
   opApproveBuildsHint: 'pnpm blocked the build scripts of these dependencies',
   opSetupPnpm: 'Set up pnpm',
-  opNeedsRefresh: 'Refresh the page to see this change.',
+  opNeedsRefresh: 'Refresh the page or restart the host to see this change.',
+  opInterrupted: 'The host restarted before this operation finished.',
 
   /* diagnostics ——— */
   diagTitle: 'Diagnostics',
