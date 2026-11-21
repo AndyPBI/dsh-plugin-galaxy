@@ -755,6 +755,10 @@ function Toolbar(props: {
             </div>
           )}
           <span className={css.spacer} />
+          {/* The two selects wrap as ONE unit: left to themselves the category
+              stayed on the track's line and 排序 dropped alone to the next,
+              which reads as a broken row rather than a deliberate break. */}
+          <span className={css.controlsGroup}>
           {category !== undefined && onCategory !== undefined && categories !== undefined && categories.length > 0 && (
             <label className={`${css.row} ${css.controlsGrow}`}>
               <select
@@ -793,6 +797,7 @@ function Toolbar(props: {
               </select>
             </label>
           )}
+          </span>
         </div>
       ) : null}
     </div>

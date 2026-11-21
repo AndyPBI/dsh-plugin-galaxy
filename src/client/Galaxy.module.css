@@ -115,13 +115,28 @@
    line to itself, the selects wrap under it, and the counts go — six equal cells
    plus two digits do not fit, and the count is the reason to pick a segment, not
    its label. */
-.toolbarFilters{flex-wrap:wrap;row-gap:8px;container-type:inline-size}
-@container (max-width:760px){
-  /* The track takes the line to itself and may scroll; the counts go, because a
-     six-way run plus two digits no longer fits one line. */
-  .filterSlider{flex:1 1 100%;overflow-x:auto}
+/* `.toolbarLine` sets `flex-wrap:nowrap`; both classes sit on one element, so
+   the wrap has to outrank it or the row can never break — which is what squeezed
+   the track to 422px and put a scrollbar under it instead of dropping the two
+   selects to the next line. */
+.toolbarLine.toolbarFilters{flex-wrap:wrap;row-gap:8px;container-type:inline-size}
+/* 分类筛选 and 排序 break to the next line together or not at all — but they
+   shrink first: the category select already ellipsizes with its full name in
+   `title`, which is the product's established behaviour at a narrow width.
+   Held at `flex:0 0 auto` the pair could only wrap, and it wrapped at widths
+   where a few pixels of ellipsis would have kept the row on one line. */
+.controlsGroup{display:flex;align-items:center;gap:14px;flex:0 1 auto;min-width:0}
+@container (max-width:820px){
+  /* Narrow: the counts are the first thing to go, because they are the reason
+     to pick a segment rather than its name. The track never scrolls — a
+     horizontal scrollbar under a filter row reads as a broken layout. */
   .filterCount{display:none}
   .filterItem{font-size:12px;padding:0 8px}
+  /* Wrapping is decided from each item's BASE width, before any shrinking, so a
+     select whose base is its full 320px label forces the row to break at widths
+     where 100px of ellipsis would have kept one line. Its face stays readable
+     (「全部分类」), and the full name stays in `title`. */
+  .toolbarFilters .categorySelect{flex-basis:200px}
 }
 
 /* Two deliberate lines instead of one wrapping row: search, then the status
