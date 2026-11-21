@@ -107,7 +107,7 @@ const BUSY_STATES: readonly string[] = ['queued', 'running']
 const KINDS: readonly string[] = ['install', 'update', 'uninstall', 'migrate', 'restore', 'order', 'self-uninstall']
 
 /** Sentence shown for a record a host restart interrupted. */
-const INTERRUPTED = 'The host restarted before this operation finished.'
+export const INTERRUPTED_REASON = 'The host restarted before this operation finished.'
 
 /** Single boundary between this module's record view and the server DTO. */
 function asRecord(fields: RecordFields): OperationRecord {
@@ -243,6 +243,10 @@ function settle(record: RecordFields, status: StatusView, boot: string, at: numb
     ...record,
     state,
     bucket: bucketOfState(state),
+    // A settled record no longer has a running percentage or a "正在安装…"
+    // line; leaving them made a completed row still look mid-install.
+    percent: undefined,
+    detail: undefined,
     reason: error ?? record.reason,
     needsRefresh: changed ? true : record.needsRefresh,
     finishedAt: record.finishedAt ?? at,
@@ -290,7 +294,9 @@ function markInterrupted(record: RecordFields, boot: string, at: number): Record
     ...record,
     state: 'failed',
     bucket: bucketOfState('failed'),
-    reason: INTERRUPTED,
+    percent: undefined,
+    detail: undefined,
+    reason: INTERRUPTED_REASON,
     needsRefresh: true,
     finishedAt: record.finishedAt ?? at,
     boot,

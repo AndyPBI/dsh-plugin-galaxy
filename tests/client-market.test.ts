@@ -159,7 +159,9 @@ function cardTitles(host: HTMLElement): string[] {
 function clickChip(host: HTMLElement, label: string): void {
   for (const group of host.querySelectorAll('[role="group"]')) {
     const chip = [...group.querySelectorAll('button')]
-      .find(button => (button.textContent ?? '').trim() === label)
+      // The status entry's accessible name is the label alone; the count that
+      // rides beside it is decorative, so textContent is only the fallback.
+      .find(button => (button.getAttribute('aria-label') ?? (button.textContent ?? '').trim()) === label)
     if (chip !== undefined) {
       chip.click()
       return
@@ -253,11 +255,12 @@ describe('Discover — installed filter corresponds to the inventory', () => {
     expect(text).not.toContain('lemoncat7')
   })
 
-  it('reports the installed total in the count line', async () => {
+  it('starts the grid without a result-count line', async () => {
+    // The「{n} 个插件」 count was removed so the cards begin directly under the
+    // toolbar. The recommendation caveat still prints, but this plain view has
+    // no counter left.
     const host = await mount()
-    clickChip(host, 'Installed')
-    await flush()
-    expect(host.textContent).toContain(String(INSTALLED.length))
+    expect(host.textContent ?? '').not.toMatch(/\d+\s*个插件/u)
   })
 
   it('offers lifecycle actions rather than "install" for an installed plugin', async () => {
@@ -832,16 +835,19 @@ function selectOption(select: HTMLSelectElement, value: string): void {
 
 describe('Discover — the sort menu', () => {
   /**
-   * 「推荐」 is a VIEW, not a sort: the panel deliberately offers no
-   * "recommendation score" ordering (the score only ever appears on the badge and
-   * in the hover explanation). This guards the decision against a well-meaning
-   * re-addition — a dropdown entry there would compete with the chip that already
-   * renders the published ranking.
+   * The field removed the 名称 and npm 下载量 orderings and added 评分 (the
+   * catalog's composite recommendation score). Score is therefore an ORDERING
+   * now, not only a badge; the published recommendation WINDOW remains a
+   * separate view, so sorting by score never claims to be the site's rank.
+   *
+   * The catalog order is deliberately not the score order, and the star order
+   * is different from both, so each assertion below can only pass for the
+   * intended comparator.
    */
   const SCORED = [
     { key: 'a/aaa', name: 'aaa', owner: 'a', npm: 'aaa', url: 'https://github.com/a/aaa', category: 'dev', stars: 10, score: 70, band: 'A' },
-    { key: 'b/bbb', name: 'bbb', owner: 'b', npm: 'bbb', url: 'https://github.com/b/bbb', category: 'dev', stars: 90, score: 90, band: 'S' },
-    { key: 'c/ccc', name: 'ccc', owner: 'c', npm: 'ccc', url: 'https://github.com/c/ccc', category: 'dev', stars: 5, score: 70, band: 'A' },
+    { key: 'b/bbb', name: 'bbb', owner: 'b', npm: 'bbb', url: 'https://github.com/b/bbb', category: 'dev', stars: 5, score: 90, band: 'S' },
+    { key: 'c/ccc', name: 'ccc', owner: 'c', npm: 'ccc', url: 'https://github.com/c/ccc', category: 'dev', stars: 90, score: 60, band: 'B' },
   ]
 
   function installScoredStub(): void {
@@ -863,21 +869,42 @@ describe('Discover — the sort menu', () => {
     }) as typeof fetch
   }
 
-  it('offers no recommendation entry: score is a badge, not an ordering', async () => {
+  it('offers score, stars and release date — no name or download ordering', async () => {
     installScoredStub()
     const host = await mount()
     await flush()
 
     const select = host.querySelector('select') as HTMLSelectElement
     const values = [...select.options].map(entry => entry.value)
-    expect(values).toEqual(['name-asc', 'name-desc', 'stars-desc', 'stars-asc', 'downloads-desc', 'downloads-asc', 'added-desc', 'added-asc'])
-    expect([...select.options].map(entry => entry.textContent).join(' ')).not.toContain('score')
+    expect(values).toEqual(['score-desc', 'score-asc', 'stars-desc', 'stars-asc', 'added-desc', 'added-asc'])
+    const labels = [...select.options].map(entry => entry.textContent).join(' ')
+    expect(labels).toContain('Score')
+    expect(labels).not.toContain('Name')
+    expect(labels).not.toContain('downloads')
+    // 默认就是评分降序，市场先给出高分条目，而不是字母序。
+    expect(select.value).toBe('score-desc')
+    expect(cardTitles(host)).toEqual(['bbb', 'aaa', 'ccc'])
+  })
 
-    // 分数仍然只出现在徽章上（这正是它该在的地方）。
+  it('sorts by score in both directions', async () => {
+    installScoredStub()
+    const host = await mount()
+    await flush()
+
+    const select = host.querySelector('select') as HTMLSelectElement
+    selectOption(select, 'score-asc')
+    await flush()
+    expect(cardTitles(host)).toEqual(['ccc', 'aaa', 'bbb'])
+
+    // 分数仍然出现在徽章上（排序不取代解释）。
     expect(host.textContent ?? '').toContain('Ranked S · 90')
 
-    // 其余排序照常工作（删掉 score 分支后不能把菜单一起弄坏）。
+    // 其余排序照常工作（删掉旧字段后不能把菜单一起弄坏）。
     selectOption(select, 'stars-desc')
+    await flush()
+    expect(cardTitles(host)).toEqual(['ccc', 'aaa', 'bbb'])
+
+    selectOption(select, 'stars-asc')
     await flush()
     expect(cardTitles(host)).toEqual(['bbb', 'aaa', 'ccc'])
   })
@@ -1034,11 +1061,11 @@ describe('Discover — category labels follow the catalog', () => {
   })
 })
 
-describe('Discover — the category selector browses the site vocabulary', () => {
+describe('Discover — the featured category browses the site vocabulary', () => {
   /**
-   * The badge alone was not enough: 「甄选」 had to be *browsable*, and the option
-   * list must come from the catalog (order and labels included) so a category the
-   * site adds appears without a plugin release.
+   * The category dropdown is gone from the toolbar; the site's featured category
+   * (「甄选」, first in the published vocabulary) remains browsable through its
+   * chip. Its label comes from the catalog, so a site-side rename still shows.
    */
   const ROWS = [
     { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12, description: '地图式知识整理' },
@@ -1101,69 +1128,46 @@ describe('Discover — the category selector browses the site vocabulary', () =>
     return container
   }
 
-  function categorySelect(host: HTMLElement, label: string): HTMLSelectElement {
-    return host.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement
+  /** The featured-category chip is the one browsable category entry left. */
+  function featuredChip(host: HTMLElement): HTMLButtonElement | undefined {
+    return [...host.querySelectorAll('button[aria-pressed]')]
+      .find(button => (button.getAttribute('aria-label') ?? '') === '甄选') as HTMLButtonElement | undefined
   }
 
-  it('offers every published category, in the site order, with live counts', async () => {
+  it('shows only the featured category once selected, and releases it on a second click', async () => {
     const host = await mountIn('zh')
-    const select = categorySelect(host, '分类筛选')
-    expect(select).toBeDefined()
-    expect([...select.options].map(option => option.textContent)).toEqual(['全部分类', '甄选 (1)', '费用与额度 (1)'])
-    expect(select.value).toBe('')
-  })
-
-  it('localizes the options with the host locale', async () => {
-    const host = await mountIn('en')
-    const select = categorySelect(host, 'Category filter')
-    expect([...select.options].map(option => option.textContent)).toEqual(['All categories', 'Featured (1)', 'Cost (1)'])
-  })
-
-  it('shows only that category\'s plugins once selected', async () => {
-    const host = await mountIn('zh')
-    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    featuredChip(host)?.click()
     await flush()
     expect(cardTitles(host)).toEqual(['dsh-atlas'])
-    // The row whose slug is not in the vocabulary is still reachable under 全部.
-    selectOption(categorySelect(host, '分类筛选'), '')
+    // The chip is a toggle; the row whose slug is not in the vocabulary is still
+    // reachable under 全部 once the category is released.
+    featuredChip(host)?.click()
     await flush()
     expect(cardTitles(host).length).toBe(3)
   })
 
-  it('composes with the search box', async () => {
+  it('composes the featured category with the search box and explains an empty result', async () => {
     const host = await mountIn('zh')
-    selectOption(categorySelect(host, '分类筛选'), 'curated')
+    featuredChip(host)?.click()
     await flush()
     const input = [...host.querySelectorAll('input')]
       .find(element => (element.getAttribute('aria-label') ?? '').startsWith('搜索')) as HTMLInputElement
     typeInto(input, '花销')
     await flush()
     expect(cardTitles(host)).toEqual([])
-  })
-
-  it('explains an empty category instead of looking broken', async () => {
-    // 「推荐」 is the fixed ranking (one scored row); the curated row is not on it,
-    // so the combination is honestly empty and the hint says how to see it.
-    const host = await mountIn('zh', true)
-    clickChip(host, '推荐')
-    await flush()
-    selectOption(categorySelect(host, '分类筛选'), 'curated')
-    await flush()
-    expect(cardTitles(host)).toEqual([])
     expect(host.textContent).toContain('该分类下没有可显示的条目')
-    expect(host.textContent).toContain('切到「全部」')
   })
 })
 
-describe('Discover — the featured category is a chip, and the controls share a line', () => {
+describe('Discover — one status slider, the featured category among its entries', () => {
   /**
-   * Two layout requirements from the field:
+   * Layout requirements from the field:
    *  1. the site's featured category (甄选, first in the published vocabulary)
-   *     must be visible WITHOUT opening a selector — the front page lists
-   *     categories as chips with 甄选 pinned first, so the panel promotes the
-   *     first vocabulary entry into the chip row right after 「全部」;
-   *  2. 「分类筛选」 and 「排序」 must sit on one line — a wrapping toolbar dropped
-   *     the category selector onto a line of its own at some widths.
+   *     is a shortcut in the STATUS bar, second after 「全部」:
+   *     全部, 甄选, 已安装, 推荐, 可更新, 不兼容;
+   *  2. 「排序」 shares the status slider's line (the category dropdown is gone);
+   *  3. the clicked chip is marked by its own colour (a class the stylesheet
+   *     fills), so hover cannot be mistaken for the selection.
    */
   const ROWS = [
     { key: 'sumarilkkxx/dsh-atlas', name: 'dsh-atlas', owner: 'sumarilkkxx', category: 'curated', stars: 12 },
@@ -1214,16 +1218,81 @@ describe('Discover — the featured category is a chip, and the controls share a
     return container
   }
 
-  /** The chip row, then the chip whose label matches. */
+  /** One slider entry, matched by its accessible name (the count is decorative). */
   function chip(host: HTMLElement, label: string): HTMLButtonElement | undefined {
     return [...host.querySelectorAll('button[aria-pressed]')]
-      .find(button => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined
+      .find(button => (button.getAttribute('aria-label') ?? (button.textContent ?? '').trim()) === label) as HTMLButtonElement | undefined
   }
 
-  it('lists 甄选 second, right after 全部', async () => {
+  it('lists 甄选 second in the status slider, right after 全部', async () => {
     const host = await mountIn('zh')
-    const labels = [...host.querySelectorAll('[role="group"] button')].map(button => (button.textContent ?? '').trim())
-    expect(labels.slice(0, 3)).toEqual(['全部', '甄选', '已安装'])
+    const statuses = [...host.querySelectorAll('[class*="filterSlider"] button')]
+      .map(button => button.getAttribute('aria-label'))
+    // This stub ships no `ranking` block, so the recommendation entry renders
+    // its honest fallback name 「未安装」.
+    expect(statuses).toEqual(['全部', '甄选', '已安装', '未安装', '可更新', '不兼容'])
+
+    // The slider and the remaining select share ONE row: the slider replaces the
+    // chip line instead of adding a line of its own, which is where the reclaimed
+    // vertical space comes from. The category dropdown is deliberately absent.
+    const row = host.querySelector('[class*="toolbarFilters"]')
+    const sort = host.querySelector('select[aria-label="排序"]')
+    expect(row).not.toBeNull()
+    expect(row?.contains(sort ?? null)).toBe(true)
+    expect(row?.contains(chip(host, '甄选') ?? null)).toBe(true)
+    expect(host.querySelector('select[aria-label="分类筛选"]')).toBeNull()
+  })
+
+  it('marks exactly one entry selected, and positions the thumb from it', async () => {
+    /*
+     * Geometry is not asserted here: jsdom has no layout, so offsetLeft and
+     * offsetWidth are 0 for every segment and the measured thumb is 0×0. What
+     * this test can hold is the contract around it — one pressed entry, a thumb
+     * element that exists and is no longer hidden, and an accessible name that
+     * stays the status. The screenshots harness covers the real geometry.
+     */
+    const host = await mountIn('zh')
+    const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
+      .map(button => button.getAttribute('aria-label') ?? '')
+    const thumb = (): HTMLElement => host.querySelector('[class*="filterThumb"]') as HTMLElement
+
+    expect(pressed()).toEqual(['全部'])
+    expect(thumb()).not.toBeNull()
+    expect(thumb().style.opacity).not.toBe('0')
+
+    chip(host, '已安装')?.click()
+    await flush()
+    expect(pressed()).toEqual(['已安装'])
+    // The segment is the label alone; the filter counts were removed.
+    expect(chip(host, '已安装')?.textContent).toBe('已安装')
+
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
+  })
+
+  it('keeps the status row mutually exclusive (甄选 then 已安装, and back)', async () => {
+    /*
+     * Field regression: after picking 甄选 and then a status, both chips stayed
+     * highlighted because the category shortcut did not take part in the row's
+     * exclusivity. Each chip click must leave exactly one pressed entry.
+     */
+    const host = await mountIn('zh')
+    const pressed = (): string[] => [...host.querySelectorAll('button[aria-pressed="true"]')]
+      .map(button => button.getAttribute('aria-label') ?? (button.textContent ?? '').trim())
+
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
+
+    chip(host, '已安装')?.click()
+    await flush()
+    expect(pressed()).toEqual(['已安装'])
+
+    // The other direction: picking 甄选 again must release the status.
+    chip(host, '甄选')?.click()
+    await flush()
+    expect(pressed()).toEqual(['甄选'])
   })
 
   it('localizes the featured chip and toggles the filter from it', async () => {
@@ -1240,29 +1309,28 @@ describe('Discover — the featured category is a chip, and the controls share a
     expect(cardTitles(host).length).toBe(2)
   })
 
-  it('keeps the chip and the selector in sync', async () => {
+  it('clears the featured category from the 全部 chip', async () => {
     const host = await mountIn('zh')
-    const select = host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement
-    selectOption(select, 'curated')
+    chip(host, '甄选')?.click()
     await flush()
     expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('true')
     // 「全部」 clears the category too — it is the "no filter" entry.
     chip(host, '全部')?.click()
     await flush()
-    expect((host.querySelector('select[aria-label="分类筛选"]') as HTMLSelectElement).value).toBe('')
+    expect(chip(host, '甄选')?.getAttribute('aria-pressed')).toBe('false')
+    expect(cardTitles(host).length).toBe(2)
   })
 
-  it('puts 分类筛选 and 排序 on one non-wrapping line', async () => {
+  it('puts the slider and 排序 on the filter row, with no category dropdown', async () => {
     const host = await mountIn('zh')
-    const category = host.querySelector('select[aria-label="分类筛选"]')
     const sort = host.querySelector('select[aria-label="排序"]') ?? host.querySelector('select[aria-label="Sort"]')
-    expect(category).not.toBeNull()
     expect(sort).not.toBeNull()
-    // Same container, and that container is the one that must not wrap.
-    const line = category?.closest('[class*="toolbarControlsLine"]')
-    expect(line).not.toBeNull()
-    expect(line?.contains(sort)).toBe(true)
-    expect(line?.className).toContain('toolbarControlsLine')
+    expect(host.querySelector('select[aria-label="分类筛选"]')).toBeNull()
+    // Same row, and that row is the one that carries the slider too. It wraps
+    // below the container breakpoint rather than overflowing.
+    const row = sort?.closest('[class*="toolbarFilters"]')
+    expect(row).not.toBeNull()
+    expect(row?.contains(host.querySelector('[class*="filterSlider"]'))).toBe(true)
   })
 })
 

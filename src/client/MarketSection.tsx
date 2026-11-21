@@ -9,7 +9,7 @@
  * mutations are the only things that talk to the server.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 // Icons come from the runtime resolver: the host renamed every glyph in 0.2.x
@@ -162,17 +162,26 @@ class MutationAbandoned extends Error {
   }
 }
 
-type SortField = 'name' | 'stars' | 'downloads' | 'added'
+type SortField = 'score' | 'stars' | 'added'
 type SortDir = 'asc' | 'desc'
 type SortKey = `${SortField}-${SortDir}`
 
+/**
+ * The sort menu, in the order the panel offers it.
+ *
+ * Name and npm-download orderings were removed on request (they either repeated
+ * the card labels or measured something the panel does not rank by); the
+ * composite catalog score takes their place and is the default, so the market
+ * opens on its best entries instead of an alphabetical list. Score is a badge
+ * AND an ordering — the published recommendation WINDOW remains a separate view
+ * whose order is `ranking.top`, so a score sort here never pretends to be the
+ * site's rank.
+ */
 const SORTS = [
-  { id: 'name-asc', field: 'sortName', dir: 'sortAsc' },
-  { id: 'name-desc', field: 'sortName', dir: 'sortDesc' },
+  { id: 'score-desc', field: 'sortScore', dir: 'sortDesc' },
+  { id: 'score-asc', field: 'sortScore', dir: 'sortAsc' },
   { id: 'stars-desc', field: 'sortStars', dir: 'sortDesc' },
   { id: 'stars-asc', field: 'sortStars', dir: 'sortAsc' },
-  { id: 'downloads-desc', field: 'sortDownloads', dir: 'sortDesc' },
-  { id: 'downloads-asc', field: 'sortDownloads', dir: 'sortAsc' },
   { id: 'added-desc', field: 'sortAdded', dir: 'sortDesc' },
   { id: 'added-asc', field: 'sortAdded', dir: 'sortAsc' },
 ] as const satisfies ReadonlyArray<{ id: SortKey; field: string; dir: string }>
@@ -359,11 +368,11 @@ function formatTime(at: number): string {
   }
 }
 
-/** 分档对应的徽标配色：S 绿色、A 中性、B/C 灰。 */
-function bandClass(band: string): string {
-  if (band === 'S') return css.badgeOk
-  if (band === 'A') return css.badge
-  return css.badgeMuted
+/** 分档对应的文字配色：S 绿色、A 中性、B/C 灰。 */
+function bandToneClass(band: string): string {
+  if (band === 'S') return css.cardBandS
+  if (band === 'A') return css.cardBandA
+  return css.cardBandC
 }
 
 /**
@@ -470,10 +479,9 @@ function compareRows(a: DiscoverRow, b: DiscoverRow, field: SortField, dir: Sort
     return Number.isNaN(parsed) ? 0 : parsed
   }
   switch (field) {
+    case 'score': return sign * (number(a.plugin.score) - number(b.plugin.score))
     case 'stars': return sign * (number(a.plugin.stars) - number(b.plugin.stars))
-    case 'downloads': return sign * (number(a.plugin.downloads) - number(b.plugin.downloads))
     case 'added': return sign * (date(a.plugin.added) - date(b.plugin.added))
-    default: return sign * a.plugin.name.localeCompare(b.plugin.name)
   }
 }
 
@@ -578,30 +586,102 @@ function Toolbar(props: {
   /** Selected category slug; `''` = all categories. */
   category?: string
   onCategory?: (value: string) => void
-  /** The catalog's vocabulary, in the order the site publishes it. */
+  /** The catalog's vocabulary, in the order the site publishes it (甄选 chip). */
   categories?: readonly RegistryCategory[]
-  /** Rows per category slug, counted over the whole catalog. */
-  categoryCounts?: ReadonlyMap<string, number>
-  /** Whether the English labels apply to the category options. */
+  /** Whether the English labels apply to the featured chip and card labels. */
   english?: boolean
   children?: ReactNode
 }) {
-  const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories, categoryCounts } = props
+  const { t, query, onQuery, placeholder, busy, onReload, filter, onFilter, recommended, sort, onSort, category, onCategory, categories } = props
+  /*
+   * The thumb is measured, not computed from an index: the segments are sized by
+   * their own labels (an equal split leaves 「全部」 floating in a wide cell while
+   * 「已安装 8」 is cramped), so the only honest way to know where the selection
+   * sits is to ask the DOM. A ResizeObserver keeps it right when the row reflows,
+   * the language changes or the catalog adds a category.
+   */
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null)
   /*
    * The site's own front page lists every category as a chip with 「甄选」 pinned
-   * first, so the panel promotes the FIRST published category to a chip right
-   * after 「全部」: the featured category is then visible without opening a
-   * selector, and the site can move the promotion by reordering its vocabulary.
-   * The selector still reaches the whole vocabulary.
+   * first. The field asked for that shortcut in the STATUS bar, second after
+   * 「全部」 (全部, 甄选, 已安装, 推荐, 可更新, 不兼容). With the category
+   * dropdown gone, this chip is the one browsable category entry: selecting it
+   * marks the chip (filled) and 「全部」 steps back so the row shows one active
+   * entry.
    */
   const featured = categories?.[0]
-  const selectedCategoryLabel = category === undefined || category === ''
-    ? undefined
-    : (() => {
-      const entry = categories?.find(candidate => candidate.id === category)
-      return entry === undefined ? category : categoryEntryLabel(entry, props.english === true)
-    })()
-  const chip = (active: boolean) => (active ? `${css.tab} ${css.tabActive}` : css.tab)
+  /*
+   * The status row is one slider, not a row of chips: the selection is a single
+   * thumb that travels, so the eye follows one object instead of repainting six
+   * pills. Every entry stays mutually exclusive — a status clears the category,
+   * and 甄选 returns the status to 「全部」.
+   */
+  const sliderEntries: {
+    key: string
+    label: string
+    active: boolean
+    onClick: () => void
+  }[] = []
+  /*
+   * The status row is a mutually-exclusive group, 甄选 included. 「全部」 therefore
+   * stays selected while only a non-featured category narrows the listing (the
+   * status is still "all"); when the featured category is the active one, 甄选
+   * carries the selection and 全部 steps back.
+   */
+  const allActive = filter === 'all' && (featured === undefined || category !== featured.id)
+  const featuredActive = featured !== undefined && category === featured.id
+  useLayoutEffect(() => {
+    const track = trackRef.current
+    if (track === null) return
+    const measure = (): void => {
+      const active = track.querySelector<HTMLElement>('[aria-pressed="true"]')
+      setThumb(active === null ? null : { left: active.offsetLeft, width: active.offsetWidth })
+    }
+    measure()
+    // jsdom has no ResizeObserver; the initial measure still runs there.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(track)
+    return () => { observer?.disconnect() }
+  }, [filter, category, props.english, recommended])
+
+  if (filter !== undefined && onFilter !== undefined) {
+    sliderEntries.push({
+      key: 'all',
+      label: t('filterAll'),
+      active: allActive,
+      onClick: () => {
+        onCategory?.('')
+        onFilter('all')
+      },
+    })
+    if (featured !== undefined && onCategory !== undefined && category !== undefined) {
+      sliderEntries.push({
+        key: 'featured',
+        label: categoryEntryLabel(featured, props.english === true),
+        active: featuredActive,
+        onClick: () => {
+          if (featuredActive) {
+            onCategory('')
+            return
+          }
+          onFilter('all')
+          onCategory(featured.id)
+        },
+      })
+    }
+    for (const entry of FILTERS.slice(1)) {
+      sliderEntries.push({
+        key: entry.id,
+        label: 'fallbackLabel' in entry && recommended !== true ? t(entry.fallbackLabel) : t(entry.label),
+        active: filter === entry.id,
+        onClick: () => {
+          onCategory?.('')
+          onFilter(entry.id)
+        },
+      })
+    }
+  }
   return (
     <div className={css.toolbar}>
       <div className={css.toolbarLine}>
@@ -614,10 +694,10 @@ function Toolbar(props: {
           onChange={event => onQuery(event.target.value)}
         />
         {props.children}
-        <span className={css.spacer} />
         <Button
           variant="outline"
           size="sm"
+          className={css.refresh}
           icon={<IconRefresh size={13} />}
           onClick={onReload}
           disabled={busy}
@@ -626,94 +706,58 @@ function Toolbar(props: {
           {t('reload')}
         </Button>
       </div>
-      {filter !== undefined && onFilter !== undefined && (
-        <div className={`${css.toolbarLine} ${css.chipLine}`} role="group" aria-label={t('filterLabel')}>
-          {FILTERS.slice(0, 1).map(entry => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-pressed={filter === entry.id && (category === undefined || category === '')}
-              className={chip(filter === entry.id && (category === undefined || category === ''))}
-              onClick={() => {
-                onCategory?.('')
-                onFilter(entry.id)
-              }}
-            >
-              {t(entry.label)}
-            </button>
-          ))}
-          {featured !== undefined && onCategory !== undefined && category !== undefined && (
-            <button
-              type="button"
-              aria-pressed={category === featured.id}
-              className={chip(category === featured.id)}
-              onClick={() => { onCategory(category === featured.id ? '' : featured.id) }}
-            >
-              {categoryEntryLabel(featured, props.english === true)}
-            </button>
+      {(filter !== undefined && onFilter !== undefined) || category !== undefined || sort !== undefined ? (
+        <div className={`${css.toolbarLine} ${css.toolbarFilters}`} role='group' aria-label={t('filterLabel')}>
+          {filter !== undefined && onFilter !== undefined && (
+            <div className={css.filterSlider} ref={trackRef}>
+              <span
+                className={css.filterThumb}
+                /* Before the first measurement it is invisible rather than parked
+                   at the left edge, so no frame shows it jumping into place. */
+                style={thumb === null ? { opacity: 0 } : { left: thumb.left, width: thumb.width }}
+                aria-hidden='true'
+              />
+              {sliderEntries.map(item => (
+                <button
+                  key={item.key}
+                  type='button'
+                  aria-pressed={item.active}
+                  aria-label={item.label}
+                  className={css.filterItem}
+                  onClick={item.onClick}
+                >
+                  <span className={css.filterItemLabel}>{item.label}</span>
+                </button>
+              ))}
+            </div>
           )}
-          {FILTERS.slice(1).map(entry => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-pressed={filter === entry.id}
-              className={chip(filter === entry.id)}
-              onClick={() => onFilter(entry.id)}
-            >
-              {t('fallbackLabel' in entry && recommended !== true ? entry.fallbackLabel : entry.label)}
-            </button>
-          ))}
+          {/* No spacer: the slider takes the free width and the sort control
+              follows it at the row's own 8px gap. The category dropdown is
+              deliberately gone; the featured category remains browsable through
+              its 甄选 chip. */}
+          <span className={css.controlsGroup}>
+          {sort !== undefined && onSort !== undefined && (
+            <label className={`${css.row} ${css.controlsFixed}`}>
+              <span className={css.selectWrap}>
+                <select
+                  className={css.select}
+                  value={sort}
+                  aria-label={t('sortLabel')}
+                  onChange={event => onSort(event.target.value as SortKey)}
+                >
+                  {SORTS.map(entry => (
+                    <option key={entry.id} value={entry.id}>
+                      {`${t(entry.field)} · ${t(entry.dir)}`}
+                    </option>
+                  ))}
+                </select>
+                <span className={css.selectChevron} aria-hidden='true' />
+              </span>
+            </label>
+          )}
+          </span>
         </div>
-      )}
-      <div className={css.toolbarControlsLine}>
-      {/*
-        * The category selector is driven by the catalog's own vocabulary, in the
-        * site's order (curated first): the panel never invents a category list, so
-        * a category the site adds appears here without a plugin release.
-        */}
-      {category !== undefined && onCategory !== undefined && categories !== undefined && categories.length > 0 && (
-        <label className={`${css.row} ${css.controlsGrow}`}>
-          <span className={css.muted}>{t('categoryFilterLabel')}</span>
-          <select
-            className={`${css.select} ${css.categorySelect}`}
-            value={category}
-            aria-label={t('categoryFilterLabel')}
-            /* The closed control may ellipsize a long label; the tooltip keeps the
-             * full text reachable without widening the row. */
-            title={selectedCategoryLabel ?? t('allCategories')}
-            onChange={event => onCategory(event.target.value)}
-          >
-            <option value=''>{t('allCategories')}</option>
-            {categories.map(entry => {
-              const label = categoryEntryLabel(entry, props.english === true)
-              const count = categoryCounts?.get(entry.id)
-              return (
-                <option key={entry.id} value={entry.id}>
-                  {count === undefined ? label : `${label} (${String(count)})`}
-                </option>
-              )
-            })}
-          </select>
-        </label>
-      )}
-      {sort !== undefined && onSort !== undefined && (
-        <label className={`${css.row} ${css.controlsFixed}`}>
-          <span className={css.muted}>{t('sortLabel')}</span>
-          <select
-            className={css.select}
-            value={sort}
-            aria-label={t('sortLabel')}
-            onChange={event => onSort(event.target.value as SortKey)}
-          >
-            {SORTS.map(entry => (
-              <option key={entry.id} value={entry.id}>
-                {`${t(entry.field)} · ${t(entry.dir)}`}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -753,46 +797,68 @@ function PluginCard(props: {
   const compatibilityClass = status === 'incompatible'
     ? `${css.badge} ${css.badgeDanger}`
     : status === 'compatible' ? `${css.badge} ${css.badgeOk}` : `${css.badge} ${css.badgeMuted}`
+  /*
+   * The card's category line is the vocabulary word alone. The selector owns the
+   * full 「办公与文档（Office / PDF / 表格 / 任务 / 日程）」 label (kept in `title`
+   * here); repeating the parenthetical on every card is what turned the line into
+   * a two-row border box.
+   */
+  const categoryFull = plugin.category === undefined || plugin.category === ''
+    ? undefined
+    : categoryText(plugin.category, props.categories, props.english === true) ?? plugin.category
+  const categoryShort = categoryFull === undefined
+    ? undefined
+    : categoryFull.replace(/\s*[（(][^）)]*[）)]/gu, '').trim()
+  /*
+   * An installed plugin the catalog does not know has no category; the installed
+   * version takes that line, so the card keeps the same four rows instead of
+   * collapsing into a void between its head and its actions when its row-mate
+   * is a fully described catalog entry.
+   */
+  const infoLine = categoryShort !== undefined
+    ? { text: `${t('categoryLabel')}: ${categoryShort}`, title: categoryFull }
+    : installed?.version === undefined
+      ? undefined
+      : { text: `${t('versionLabel')}: ${installed.version}`, title: undefined }
   return (
     <div role="listitem" className={css.cardCell}>
       <article className={css.card} aria-label={displayLabelOf(plugin)}>
         <div className={css.cardHead}>
           {row.rank !== undefined && (
             // 「推荐」视图的名次：就是这个列表的顺序（1、2、3…），搜过的视图里也保持真实名次。
-            <span className={`${css.badge} ${css.rankBadge}`} title={t('rankLabel', { rank: row.rank })}>
+            <span className={css.rankBadge} title={t('rankLabel', { rank: row.rank })}>
               {`#${String(row.rank)}`}
             </span>
           )}
-          <h3 className={css.cardTitle}>{displayLabelOf(plugin)}</h3>
+          <h3 className={css.cardTitle} title={displayLabelOf(plugin)}>{displayLabelOf(plugin)}</h3>
           {installed !== undefined && (
-            <span className={`${css.badge} ${css.badgeOk}`}>{t('installedBadge')}</span>
+            <span className={css.stateOk}>{t('installedBadge')}</span>
           )}
           {update?.updateAvailable === true && (
-            <span className={`${css.badge} ${css.badgeWarn}`}>{t('updateAvailableBadge')}</span>
+            <span className={css.stateWarn}>{t('updateAvailableBadge')}</span>
           )}
           {plugin.deprecated === true && (
-            <span className={`${css.badge} ${css.badgeDanger}`}>{t('deprecatedBadge')}</span>
+            <span className={css.stateDanger}>{t('deprecatedBadge')}</span>
+          )}
+          {plugin.pinReason !== undefined && plugin.pinReason !== '' && (
+            <span className={css.stateWarn} title={plugin.pinReason}>{t('pinBadge')}</span>
           )}
           {plugin.band !== undefined && (
             // 推荐分的分档与"为什么推荐"（分项 + 编辑推荐理由）。目录没带评分时不显示。
-            <span className={`${css.badge} ${bandClass(plugin.band)}`} title={scoreExplanation(plugin, t)}>
-              {`${t('bandLabel')} ${plugin.band}${plugin.score === undefined ? '' : ` · ${String(Math.round(plugin.score))}`}`}
+            // 窄卡片只留「S · 92」：word 分离出来，卡片自己的容器查询决定是否显示。
+            <span className={`${css.cardBand} ${bandToneClass(plugin.band)}`} title={scoreExplanation(plugin, t)}>
+              <span className={css.bandWord}>{`${t('bandLabel')} `}</span>
+              {`${plugin.band}${plugin.score === undefined ? '' : ` · ${String(Math.round(plugin.score))}`}`}
             </span>
           )}
-          {plugin.pinReason !== undefined && plugin.pinReason !== '' && (
-            <span className={`${css.badge} ${css.badgeWarn}`} title={plugin.pinReason}>{t('pinBadge')}</span>
-          )}
         </div>
+        {infoLine !== undefined && (
+          <p className={css.cardCategory} title={infoLine.title}>{infoLine.text}</p>
+        )}
         {plugin.description !== undefined && plugin.description !== '' && (
           <p className={css.cardDesc}>{plugin.description}</p>
         )}
         <div className={css.cardMeta}>
-          {row.duplicateName && plugin.owner !== undefined && plugin.owner !== '' && (
-            <span className={css.tag} title={plugin.url ?? plugin.name}>{`${t('ownerLabel')}: ${plugin.owner}`}</span>
-          )}
-          {plugin.category !== undefined && plugin.category !== '' && (
-            <span className={css.tag}>{`${t('categoryLabel')}: ${categoryText(plugin.category, props.categories, props.english === true) ?? plugin.category}`}</span>
-          )}
           {typeof plugin.stars === 'number' && (
             <span className={css.stars}>{`★ ${String(plugin.stars)}`}</span>
           )}
@@ -805,7 +871,9 @@ function PluginCard(props: {
           >
             {compatibilityLabel}
           </span>
-          {installed?.version !== undefined && <span>{`${t('versionLabel')}: ${installed.version}`}</span>}
+          {row.duplicateName && plugin.owner !== undefined && plugin.owner !== '' && (
+            <span title={plugin.url ?? plugin.name}>{`${t('ownerLabel')}: ${plugin.owner}`}</span>
+          )}
         </div>
         {plugin.deprecated === true && (
           <p className={css.danger}>
@@ -831,76 +899,98 @@ function PluginCard(props: {
             </a>
           )}
           {row.fromCatalog && (
-            <Button variant="ghost" size="sm" onClick={() => actions.openComments(plugin)}>
+            // A text action, not a ghost button: its host padding made the foot
+            // too wide to hold the links and the three lifecycle buttons on one
+            // line at the settings dialog's width.
+            <button
+              type='button'
+              className={`${css.link} ${css.actionLink}`}
+              onClick={() => actions.openComments(plugin)}
+            >
               {comments > 0 ? `${t('commentsOpen')} (${String(comments)})` : t('commentsOpen')}
-            </Button>
+            </button>
           )}
           <span className={css.spacer} />
-          {installed === undefined
-            ? (
-                <>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={plugin.deprecated === true || actions.busy}
-                    title={actions.busy ? t('busyWait') : t('installConfirmBody')}
-                    onClick={() => actions.install(plugin)}
-                  >
-                    {actions.pending === row.source ? t('installing') : t('install')}
-                  </Button>
-                  {plugin.deprecated === true && replacement !== undefined && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={actions.busy}
-                      onClick={() => actions.install(replacement)}
-                    >
-                      {t('installReplacement')}
-                    </Button>
+          {(installed === undefined || !isSelf || update?.updateAvailable === true) && (
+            // One group so the buttons move together to the right edge of their
+            // own line when a narrow card cannot hold links and actions on one.
+            <span className={css.cardActionGroup}>
+              {installed === undefined
+                ? (
+                    <>
+                      <Button
+                        // Same outline rectangle as 停用/更新/卸载. A filled
+                        // primary measured the same 48×28 but its solid surface
+                        // read larger than the bordered actions beside it; the
+                        // single button on the card is signal enough.
+                        variant="outline"
+                        size="sm"
+                        disabled={plugin.deprecated === true || actions.busy}
+                        title={actions.busy ? t('busyWait') : t('installConfirmBody')}
+                        onClick={() => actions.install(plugin)}
+                      >
+                        {actions.pending === row.source ? t('installing') : t('install')}
+                      </Button>
+                      {plugin.deprecated === true && replacement !== undefined && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={actions.busy}
+                          onClick={() => actions.install(replacement)}
+                        >
+                          {t('installReplacement')}
+                        </Button>
+                      )}
+                    </>
+                  )
+                : (
+                    // An installed plugin is never offered "install": the actions
+                    // that make sense are its own lifecycle — enable/disable,
+                    // update, uninstall — and the same card shape now serves every
+                    // filter.
+                    <>
+                      {!isSelf && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={actions.busy}
+                          onClick={() => actions.toggle(installed.name, installed.disabled)}
+                        >
+                          {installed.disabled ? t('enable') : t('disable')}
+                        </Button>
+                      )}
+                      {update?.updateAvailable === true && (
+                        // The amber 可更新 word already carries the signal; a filled
+                        // primary here was the loudest object on every installed
+                        // card. Both lifecycle actions sit at the same weight.
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={actions.busy}
+                          onClick={() => actions.update(installed.name)}
+                        >
+                          {actions.pending === installed.name ? t('updating') : t('update')}
+                        </Button>
+                      )}
+                      {!isSelf && (
+                        // Same host Button as 停用/更新, so the destructive action
+                        // is the same rectangle and corner treatment; only the
+                        // label colour marks it. It still opens the confirmation
+                        // dialog used by the Installed list.
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={css.danger}
+                          disabled={actions.busy}
+                          onClick={() => actions.uninstall(installed.name)}
+                        >
+                          {actions.pending === installed.name ? t('uninstalling') : t('uninstall')}
+                        </Button>
+                      )}
+                    </>
                   )}
-                </>
-              )
-            : (
-                // An installed plugin is never offered "install": the actions
-                // that make sense are its own lifecycle — enable/disable,
-                // update, uninstall — and the same card shape now serves every
-                // filter.
-                <>
-                  {!isSelf && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={actions.busy}
-                      onClick={() => actions.toggle(installed.name, installed.disabled)}
-                    >
-                      {installed.disabled ? t('enable') : t('disable')}
-                    </Button>
-                  )}
-                  {update?.updateAvailable === true && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={actions.busy}
-                      onClick={() => actions.update(installed.name)}
-                    >
-                      {actions.pending === installed.name ? t('updating') : t('update')}
-                    </Button>
-                  )}
-                  {!isSelf && (
-                    // Last, and marked dangerous, matching the Installed tab.
-                    // The confirmation dialog is the same one that tab uses.
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={css.danger}
-                      disabled={actions.busy}
-                      onClick={() => actions.uninstall(installed.name)}
-                    >
-                      {actions.pending === installed.name ? t('uninstalling') : t('uninstall')}
-                    </Button>
-                  )}
-                </>
-              )}
+            </span>
+          )}
         </div>
       </article>
     </div>
@@ -1380,7 +1470,7 @@ export function MarketSection(props: {
   const [filter, setFilter] = useState<DiscoverFilter>(
     () => (tabFromPreferred(props.preferredSubsectionId) === 'installed' ? 'installed' : 'all'),
   )
-  const [sort, setSort] = useState<SortKey>('name-asc')
+  const [sort, setSort] = useState<SortKey>('score-desc')
   // '' = no category filter. Kept as a slug (not a label) because the site owns
   // the vocabulary and may relabel a category without changing its rows.
   const [category, setCategory] = useState('')
@@ -1921,24 +2011,6 @@ export function MarketSection(props: {
    * The compatibility verdict is applied on top of this set once it arrives, so
    * the request below can ask about exactly these rows.
    */
-  /*
-   * Rows per category slug, counted over the whole catalog — the number the
-   * selector shows next to a label. Counted from the rows the panel holds rather
-   * than the vocabulary's `count`: the two agree on a healthy catalog (gate
-   * 11.4), and when they disagree the number should describe what selecting the
-   * category will actually show.
-   */
-  const countsByCategory = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const plugin of registry?.plugins ?? []) {
-      for (const part of (plugin.category ?? '').split(',')) {
-        const slug = part.trim()
-        if (slug !== '') counts.set(slug, (counts.get(slug) ?? 0) + 1)
-      }
-    }
-    return counts
-  }, [registry])
-
   const matchedDiscoverRows = useMemo(
     () => (filter === 'incompatible'
       ? discoverRows.filter(row => row.compatibility?.status === 'incompatible')
@@ -2217,7 +2289,6 @@ export function MarketSection(props: {
             category={category}
             onCategory={setCategory}
             categories={registry?.categories}
-            categoryCounts={countsByCategory}
             english={english}
           />
           {registryLoading && registry === null && (
@@ -2237,18 +2308,22 @@ export function MarketSection(props: {
           )}
           {registryError === null && !(registryLoading && registry === null) && (
             <>
-              <p className={css.count}>
-                {t('resultCount', { count: matchedDiscoverRows.length })}
-                {rankingView && (
-                  // 推荐榜是有意截断的：不在榜上的插件仍然可以在「全部」里搜到。
-                  <span className={css.muted}>{` · ${t('recommendNote', { count: matchedDiscoverRows.length })}`}</span>
-                )}
-                {refreshedAt !== null && (
-                  <span className={css.muted}>
-                    {` · ${reloadBusy ? t('reloadBusy') : t('refreshedAt', { time: formatTime(refreshedAt) })}`}
-                  </span>
-                )}
-              </p>
+              {(rankingView || refreshedAt !== null) && (
+                // The plain result count is gone so the cards start right under
+                // the toolbar; only the two caveats that outlive the count keep
+                // a line of their own.
+                <p className={`${css.count} ${css.countLine}`}>
+                  {rankingView && (
+                    // 推荐榜是有意截断的：不在榜上的插件仍然可以在「全部」里搜到。
+                    <span className={css.muted}>{t('recommendNote', { count: matchedDiscoverRows.length })}</span>
+                  )}
+                  {refreshedAt !== null && (
+                    <span className={css.muted}>
+                      {`${rankingView ? ' · ' : ''}${reloadBusy ? t('reloadBusy') : t('refreshedAt', { time: formatTime(refreshedAt) })}`}
+                    </span>
+                  )}
+                </p>
+              )}
               {matchedDiscoverRows.length === 0
                 ? (
                     <div className={css.empty}>
@@ -2260,7 +2335,7 @@ export function MarketSection(props: {
                   )
                 : (
                     <>
-                      <div className={css.cardGrid} role="list">
+                      <div className={`${css.cardGrid} ${css.marketGrid}`} role="list">
                         {visibleDiscoverRows.map(row => (
                           <PluginCard key={row.key} t={t} row={row} actions={actions} categories={registry?.categories} english={english} />
                         ))}

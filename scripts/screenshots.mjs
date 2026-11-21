@@ -308,12 +308,16 @@ window.__DSH_BOOT__ = () => {
   void (async () => {
     await settle()
     if (view !== 'detail' && labels[view] !== undefined) {
+      // The accessible name is the label alone; the count is aria-hidden, so
+      // 已安装's button text is 「已安装 8」. Matching on textContent silently
+      // captured the wrong view. Match the aria-label, and leave the 300ms
+      // thumb transition time to land before the shot.
       const button = [...document.querySelectorAll('button[aria-pressed]')]
-        .find(candidate => (candidate.textContent ?? '').trim() === labels[view])
+        .find(candidate => (candidate.getAttribute('aria-label') ?? candidate.textContent ?? '').trim() === labels[view])
       if (button === undefined) events.push('filter button not found: ' + labels[view])
       else button.click()
       await settle()
-      await settle()
+      await new Promise(resolve => setTimeout(resolve, 400))
     }
     if (view === 'detail') {
       const open = [...document.querySelectorAll('button')]
@@ -580,19 +584,31 @@ async function captureView(port, { url, target, width, height, scale }) {
           cards: document.querySelectorAll('[class*="cardTitle"]').length,
           titles: [...document.querySelectorAll('[class*="cardTitle"]')].slice(0, 4).map(node => node.textContent),
           categories: [...document.querySelectorAll('select[aria-label] option')].map(node => node.textContent),
-          // The layout requirement in numbers: 分类筛选 and 排序 must share a line,
-          // which is measurable rather than a matter of opinion.
-          categorySelectRect: (() => {
-            const node = document.querySelector('select[aria-label="分类筛选"]')
+          // The layout requirement in numbers: the status slider and 排序 share
+          // one line, which is measurable rather than a matter of opinion.
+          sliderRect: (() => {
+            const node = document.querySelector('[class*="filterSlider"]')
             if (node === null) return null
             const r = node.getBoundingClientRect()
-            return { top: r.top, left: r.left, right: r.right, width: r.width }
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
           })(),
           sortSelectRect: (() => {
             const node = document.querySelector('select[aria-label="排序"]') ?? document.querySelector('select[aria-label="Sort"]')
             if (node === null) return null
             const r = node.getBoundingClientRect()
-            return { top: r.top, left: r.left, right: r.right, width: r.width }
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
+          })(),
+          searchRect: (() => {
+            const node = document.querySelector('[class*="search"]')
+            if (node === null) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
+          })(),
+          refreshRect: (() => {
+            const node = [...document.querySelectorAll('button')].find(candidate => ['刷新', 'Refresh'].includes((candidate.textContent ?? '').trim()))
+            if (node === undefined) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
           })(),
           chips: [...document.querySelectorAll('[role="group"] button')].map(node => node.textContent),
           viewportWidth: window.innerWidth,
@@ -656,17 +672,29 @@ async function measureControls(port, url, width) {
       const evaluated = await send('Runtime.evaluate', {
         expression: `JSON.stringify({
           ready: document.body?.dataset?.ready ?? '',
-          categorySelectRect: (() => {
-            const node = document.querySelector('select[aria-label="分类筛选"]')
+          sliderRect: (() => {
+            const node = document.querySelector('[class*="filterSlider"]')
             if (node === null) return null
             const r = node.getBoundingClientRect()
-            return { top: r.top, left: r.left, right: r.right, width: r.width }
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
           })(),
           sortSelectRect: (() => {
             const node = document.querySelector('select[aria-label="排序"]') ?? document.querySelector('select[aria-label="Sort"]')
             if (node === null) return null
             const r = node.getBoundingClientRect()
-            return { top: r.top, left: r.left, right: r.right, width: r.width }
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
+          })(),
+          searchRect: (() => {
+            const node = document.querySelector('[class*="search"]')
+            if (node === null) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
+          })(),
+          refreshRect: (() => {
+            const node = [...document.querySelectorAll('button')].find(candidate => ['刷新', 'Refresh'].includes((candidate.textContent ?? '').trim()))
+            if (node === undefined) return null
+            const r = node.getBoundingClientRect()
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height, radius: getComputedStyle(node).borderRadius }
           })(),
           viewportWidth: window.innerWidth,
         })`,
@@ -705,37 +733,79 @@ try {
     if (!ok) process.exitCode = 1
 
     /*
-     * Layout guard, measured rather than eyeballed: 「分类筛选」 and 「排序」 must
-     * share a line AND not overlap. The category control carries the site's whole
-     * vocabulary (labels like 服务与交易（客服 / 订阅 / 开票 / 支付）), and before it
-     * was width-capped it pushed the sort control out of the row.
+     * Layout guard, measured rather than eyeballed: with the category dropdown
+     * removed, 「排序」 takes the status slider's line at the image widths. The
+     * guard also fails if the sort is not rendered (a zero-size box is how a
+     * hidden control used to pass a geometry check).
      */
-    const category = state.categorySelectRect
+    const slider = state.sliderRect
     const sort = state.sortSelectRect
-    if (category != null && sort != null) {
-      const sameLine = Math.abs(category.top - sort.top) < 4
-      const noOverlap = category.right <= sort.left + 1
-      const insideRow = category.left >= 0 && sort.right <= (state.viewportWidth ?? Number.POSITIVE_INFINITY) + 1
-      check(`    ${view.file}: 分类筛选与排序同行`, sameLine, `top ${String(Math.round(category.top))} vs ${String(Math.round(sort.top))}`)
-      check(`    ${view.file}: 分类筛选不挤压/重叠排序`, noOverlap && insideRow,
-        `分类框 right=${String(Math.round(category.right))} 排序 left=${String(Math.round(sort.left))} (宽度 ${String(Math.round(category.width))})`)
+    if (view.id === 'recommended') {
+      // The ranking owns the order, so this view deliberately has no sort
+      // control; the slider must still be there.
+      check(`    ${view.file}: 推荐视图无排序、滑轨存在`, sort == null && slider != null && slider.width > 0, 'recommended view')
+    } else if (slider != null && sort != null) {
+      const sameLine = Math.abs(slider.top - sort.top) < 4
+      const noOverlap = slider.right <= sort.left + 1
+      const gap = sort.left - slider.right
+      const insideRow = sort.width > 0 && slider.width > 0
+        && sort.left >= 0 && sort.right <= (state.viewportWidth ?? Number.POSITIVE_INFINITY) + 1
+      check(`    ${view.file}: 滑轨与排序同行`, sameLine, `top ${String(Math.round(slider.top))} vs ${String(Math.round(sort.top))}`)
+      check(`    ${view.file}: 排序紧贴滑轨右侧且不出框`, noOverlap && insideRow && gap <= 12,
+        `gap=${String(Math.round(gap))} 滑轨 right=${String(Math.round(slider.right))} 排序 left=${String(Math.round(sort.left))} (宽 ${String(Math.round(sort.width))})`)
+    } else {
+      check(`    ${view.file}: 滑轨与排序均存在`, false, 'not rendered')
+    }
+    /*
+     * The search row must use the same box spec as the filter row: 34px tall,
+     * 8px corners, and the same 8px gap between its two controls as between the
+     * slider and the sort.
+     */
+    const search = state.searchRect
+    const refresh = state.refreshRect
+    if (search != null && refresh != null && slider != null) {
+      const searchGap = refresh.left - search.right
+      const filterGap = sort == null ? searchGap : sort.left - slider.right
+      const boxes = [search, refresh, slider, ...(sort == null ? [] : [sort])]
+      const heights = boxes.map(box => box.height)
+      const radii = boxes.map(box => box.radius)
+      check(`    ${view.file}: 搜索/刷新与滑轨/排序间距一致`, Math.abs(searchGap - filterGap) <= 1,
+        `搜索 ${String(Math.round(searchGap))} vs 筛选 ${String(Math.round(filterGap))}`)
+      check(`    ${view.file}: 四个控件同高同圆角`, heights.every(h => Math.abs(h - 34) < 0.6) && radii.every(r => r === '8px'),
+        `高 ${heights.map(h => String(Math.round(h))).join('/')} 圆角 ${radii.join('/')}`)
+    } else {
+      check(`    ${view.file}: 搜索/刷新控件存在`, false, 'not rendered')
     }
   }
   // The dialog-width pass: the images above are wide, this is where the panel
   // actually lives. Reported with the same PASS/FAIL wording as the images.
   for (const narrow of [420, 380]) {
     const state = await measureControls(browser.port, `file://${join(shotDir, 'page.html')}?view=all`, narrow)
-    const category = state.categorySelectRect
+    const slider = state.sliderRect
     const sort = state.sortSelectRect
-    if (category == null || sort == null) {
-      check(`    ${String(narrow)}px: the two controls are present`, false, 'not rendered')
+    if (slider == null || sort == null || slider.width === 0 || sort.width === 0) {
+      check(`    ${String(narrow)}px: 滑轨与排序都渲染`, false, 'not rendered or zero-size')
       continue
     }
-    check(`    ${String(narrow)}px: 分类筛选与排序同行`, Math.abs(category.top - sort.top) < 4,
-      `top ${String(Math.round(category.top))} vs ${String(Math.round(sort.top))}`)
-    check(`    ${String(narrow)}px: 分类筛选不挤压/重叠排序 (含不出框)`,
-      category.right <= sort.left + 1 && sort.right <= (state.viewportWidth ?? 0) + 1,
-      `分类框 right=${String(Math.round(category.right))} 排序 left=${String(Math.round(sort.left))} 排序 right=${String(Math.round(sort.right))} 视口=${String(state.viewportWidth)}`)
+    const sameLine = Math.abs(slider.top - sort.top) < 4
+    const noOverlap = sameLine
+      ? slider.right <= sort.left + 1
+      : sort.top >= (slider.bottom ?? slider.top) - 1
+    const inside = sort.left >= 0 && sort.right <= (state.viewportWidth ?? 0) + 1
+    check(`    ${String(narrow)}px: 排序可见且不与滑轨重叠`,
+      noOverlap && inside,
+      `top ${String(Math.round(slider.top))}/${String(Math.round(sort.top))} 滑轨 right=${String(Math.round(slider.right))} 排序 left=${String(Math.round(sort.left))} right=${String(Math.round(sort.right))} 宽=${String(Math.round(sort.width))} 视口=${String(state.viewportWidth)}`)
+    const search = state.searchRect
+    const refresh = state.refreshRect
+    if (search != null && refresh != null) {
+      const gap = refresh.left - search.right
+      check(`    ${String(narrow)}px: 搜索/刷新同高（34）且间距 8`,
+        Math.abs(search.height - 34) < 0.6 && Math.abs(refresh.height - 34) < 0.6
+          && Math.abs(gap - 8) <= 1 && search.radius === '8px' && refresh.radius === '8px',
+        `高 ${String(Math.round(search.height))}/${String(Math.round(refresh.height))} 间距 ${String(Math.round(gap))} 圆角 ${search.radius}/${refresh.radius}`)
+    } else {
+      check(`    ${String(narrow)}px: 搜索/刷新存在`, false, 'not rendered')
+    }
   }
 } finally {
   browser.child.kill('SIGKILL')

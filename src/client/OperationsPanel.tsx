@@ -21,7 +21,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './Galaxy.module.css'
 import type { Translate } from './locales-settings.ts'
 import type { OperationRecord } from './market-data.ts'
-import { bucketOf, groupRecords } from './operations.ts'
+import { bucketOf, groupRecords, INTERRUPTED_REASON } from './operations.ts'
 
 /**
  * The fields this panel reads. The server DTO is read structurally so that
@@ -94,26 +94,67 @@ function OperationRow(props: {
   const rollbackId = rollbackTokenOf(row)
   const settled = !isBusyState(row.state)
   const percent = typeof row.percent === 'number' ? row.percent : null
+  const reason = row.reason === INTERRUPTED_REASON ? t('opInterrupted') : row.reason
 
   return (
-    <div className={css.row} data-record={row.id}>
-      <div className={css.sectionHeader}>
-        <span className={css.badge}>{t(`opKind_${row.kind}`)}</span>
-        <span>{row.name}</span>
-        <span className={bucketOf(record) === 'attention' ? css.danger : css.muted}>
+    <div className={css.opsRow} data-record={row.id}>
+      <div className={css.opsRowHead}>
+        <span className={css.opsKind}>{t(`opKind_${row.kind}`)}</span>
+        <span className={css.opsName} title={row.name}>{row.name}</span>
+        <span className={`${css.opsState} ${bucketOf(record) === 'attention' ? css.danger : css.muted}`}>
           {t(`opState_${row.state}`)}
+        </span>
+        <span className={css.opsActions}>
+          {rollbackId !== null && settled ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { props.onRollback(record) }}
+            >{t('opRollback')}</Button>
+          ) : null}
+          {row.state === 'running' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={cancelling}
+              onClick={props.onCancel}
+            >{cancelling ? t('opCancelling') : t('opCancel')}</Button>
+          ) : null}
+          {row.state === 'failed' && blocked.length > 0 ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => { props.onApproveBuilds(blocked) }}
+            >{t('opApproveBuilds')}</Button>
+          ) : null}
+          {row.state === 'failed' && blocked.length === 0 && row.pnpmMissing === true ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={props.onSetupPnpm}
+            >{t('opSetupPnpm')}</Button>
+          ) : null}
         </span>
       </div>
 
       {percent !== null ? (
-        <div className={css.progress} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-          <span className={css.badge}>{percent}%</span>
+        <div
+          className={css.opsProgress}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+        >
+          <span className={css.opsTrack}>
+            <span className={css.opsFill} style={{ width: `${String(percent)}%` }} />
+          </span>
+          <span className={css.opsPercent}>{`${String(percent)}%`}</span>
         </div>
       ) : null}
 
-      {row.detail !== undefined && row.detail !== '' ? <p className={css.muted}>{row.detail}</p> : null}
-      {row.reason !== undefined && row.reason !== '' ? (
-        <p className={bucketOf(record) === 'attention' ? css.danger : css.muted}>{row.reason}</p>
+      {row.detail !== undefined && row.detail !== '' ? <p className={css.opsDetail}>{row.detail}</p> : null}
+      {reason !== undefined && reason !== '' ? (
+        <p className={bucketOf(record) === 'attention' ? css.danger : css.muted}>{reason}</p>
       ) : null}
 
       {blocked.length > 0 ? (
@@ -123,40 +164,8 @@ function OperationRow(props: {
       ) : null}
 
       {settled && row.state === 'done' && row.needsRefresh === true ? (
-        <p className={css.muted}>{t('opNeedsRefresh')}</p>
+        <p className={css.opsDetail}>{t('opNeedsRefresh')}</p>
       ) : null}
-
-      <div className={css.toolbar}>
-        {rollbackId !== null && settled ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => { props.onRollback(record) }}
-          >{t('opRollback')}</Button>
-        ) : null}
-        {row.state === 'running' ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={cancelling}
-            onClick={props.onCancel}
-          >{cancelling ? t('opCancelling') : t('opCancel')}</Button>
-        ) : null}
-        {row.state === 'failed' && blocked.length > 0 ? (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => { props.onApproveBuilds(blocked) }}
-          >{t('opApproveBuilds')}</Button>
-        ) : null}
-        {row.state === 'failed' && blocked.length === 0 && row.pnpmMissing === true ? (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={props.onSetupPnpm}
-          >{t('opSetupPnpm')}</Button>
-        ) : null}
-      </div>
     </div>
   )
 }
@@ -174,10 +183,10 @@ function Group(props: {
 }): ReactElement | null {
   if (props.records.length === 0) return null
   return (
-    <section className={css.card}>
-      <div className={css.sectionHeader}>
-        <span>{props.title}</span>
-        <span className={css.badge}>{props.records.length}</span>
+    <section className={css.opsGroup}>
+      <div className={css.opsGroupHead}>
+        <span className={css.opsGroupTitle}>{props.title}</span>
+        <span className={css.opsGroupCount}>{props.records.length}</span>
       </div>
       {props.records.map(record => (
         <OperationRow
@@ -204,7 +213,6 @@ export function OperationsPanel(props: {
   onSetupPnpm: () => void
 }): ReactElement {
   const { t, records } = props
-  const [open, setOpen] = useState(false)
   /**
    * Cancellation is a request, not a state transition: the record only leaves
    * `running` once the host has stopped the child. Disabling the button in the
@@ -218,67 +226,54 @@ export function OperationsPanel(props: {
   }, [anyRunning])
 
   const groups = groupRecords(records)
-  const attention = groups.attention.length
-  const running = groups.busy.length
 
+  /*
+   * The panel no longer carries a second "操作记录" toggle: the market section's
+   * 「任务」 strip already owns open/closed and the record count, so a nested
+   * toggle only hid the rows behind another click (and its button picked up the
+   * market `.toolbar` column layout). The records render directly here.
+   */
   return (
-    <div className={css.panel} data-entry="operations">
-      <button
-        type="button"
-        className={css.toolbar}
-        aria-expanded={open}
-        aria-label={t(open ? 'opHide' : 'opShow')}
-        onClick={() => { setOpen(current => !current) }}
-      >
-        <span>{t('opTitle')}</span>
-        {running > 0 ? <span className={css.spinner} aria-hidden="true" /> : null}
-        {records.length > 0 ? <span className={css.badge}>{records.length}</span> : null}
-        {attention > 0 ? <span className={css.danger}>{attention}</span> : null}
-      </button>
-
-      {open ? (
-        <div className={css.root}>
-          {records.length === 0 ? (
-            <div className={css.empty}>
-              <div>{t('opEmpty')}</div>
-              <div className={css.muted}>{t('opEmptyHint')}</div>
-            </div>
-          ) : (
-            <>
-              <Group
-                t={t}
-                title={t('opAttentionTitle')}
-                records={groups.attention}
-                cancelling={cancelling}
-                onRollback={props.onRollback}
-                onCancel={() => { setCancelling(true); props.onCancel() }}
-                onApproveBuilds={props.onApproveBuilds}
-                onSetupPnpm={props.onSetupPnpm}
-              />
-              <Group
-                t={t}
-                title={t('opBusyTitle')}
-                records={groups.busy}
-                cancelling={cancelling}
-                onRollback={props.onRollback}
-                onCancel={() => { setCancelling(true); props.onCancel() }}
-                onApproveBuilds={props.onApproveBuilds}
-                onSetupPnpm={props.onSetupPnpm}
-              />
-              <Group
-                t={t}
-                title={t('opOkTitle')}
-                records={groups.ok}
-                cancelling={cancelling}
-                onRollback={props.onRollback}
-                onCancel={() => { setCancelling(true); props.onCancel() }}
-                onApproveBuilds={props.onApproveBuilds}
-                onSetupPnpm={props.onSetupPnpm}
-              />
-            </>
-          )}
+    <div className={css.opsBody}>
+      {records.length === 0 ? (
+        <div className={css.opsEmpty}>
+          <div>{t('opEmpty')}</div>
+          <div className={css.muted}>{t('opEmptyHint')}</div>
         </div>
-      ) : null}
+      ) : (
+        <>
+          <Group
+            t={t}
+            title={t('opAttentionTitle')}
+            records={groups.attention}
+            cancelling={cancelling}
+            onRollback={props.onRollback}
+            onCancel={() => { setCancelling(true); props.onCancel() }}
+            onApproveBuilds={props.onApproveBuilds}
+            onSetupPnpm={props.onSetupPnpm}
+          />
+          <Group
+            t={t}
+            title={t('opBusyTitle')}
+            records={groups.busy}
+            cancelling={cancelling}
+            onRollback={props.onRollback}
+            onCancel={() => { setCancelling(true); props.onCancel() }}
+            onApproveBuilds={props.onApproveBuilds}
+            onSetupPnpm={props.onSetupPnpm}
+          />
+          <Group
+            t={t}
+            title={t('opOkTitle')}
+            records={groups.ok}
+            cancelling={cancelling}
+            onRollback={props.onRollback}
+            onCancel={() => { setCancelling(true); props.onCancel() }}
+            onApproveBuilds={props.onApproveBuilds}
+            onSetupPnpm={props.onSetupPnpm}
+          />
+        </>
+      )}
     </div>
   )
 }
