@@ -127,16 +127,22 @@
    where a few pixels of ellipsis would have kept the row on one line. */
 .controlsGroup{display:flex;align-items:center;gap:14px;flex:0 1 auto;min-width:0}
 @container (max-width:820px){
-  /* Narrow: the counts are the first thing to go, because they are the reason
-     to pick a segment rather than its name. The track never scrolls — a
-     horizontal scrollbar under a filter row reads as a broken layout. */
-  .filterCount{display:none}
+  /* Narrow: the track never scrolls — a horizontal scrollbar under a filter row
+     reads as a broken layout — and the category select gives up width before
+     anything else does, because it is the one control that can ellipsize with
+     its full name kept in `title`. */
   .filterItem{font-size:12px;padding:0 8px}
   /* Wrapping is decided from each item's BASE width, before any shrinking, so a
      select whose base is its full 320px label forces the row to break at widths
      where 100px of ellipsis would have kept one line. Its face stays readable
      (「全部分类」), and the full name stays in `title`. */
   .toolbarFilters .categorySelect{flex-basis:200px}
+}
+
+@container (max-width:520px){
+  /* Only once the row is genuinely too narrow do the counts go: they are the
+     reason to pick 已安装 or 可更新, so they outrank a third toolbar line. */
+  .filterCount{display:none}
 }
 
 /* Two deliberate lines instead of one wrapping row: search, then the status
