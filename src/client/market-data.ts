@@ -820,6 +820,28 @@ export async function fetchRegistry(force?: boolean): Promise<{
   return { registry: { plugins: [] } }
 }
 
+/** The operator site's prose for one plugin (the card's 简介 dialog). */
+export interface SiteIntro {
+  /** `owner/name`, the site's key for the page. */
+  key?: string
+  name?: string
+  /** The site's short card line. */
+  description?: string
+  /** The site's full intro; preferred by the dialog. */
+  descriptionFull?: string
+  /** The site's English intro. */
+  descriptionEn?: string
+}
+
+/** Ask the plugin's server for the site intro of one catalog row. */
+export async function fetchIntro(query: { key?: string; name?: string }): Promise<SiteIntro> {
+  const params: Record<string, string> = {}
+  if (query.key !== undefined && query.key !== '') params.key = query.key
+  if (query.name !== undefined && query.name !== '') params.name = query.name
+  const body = await request<{ intro?: SiteIntro }>('/intro', { query: params })
+  return body.intro ?? {}
+}
+
 /** Installed inventory, groups, notes, favorites, patch state and diagnostics. */
 export function fetchInstalled(): Promise<InstalledPayload> {
   return request<InstalledPayload>('/installed')

@@ -8,6 +8,38 @@
  * carries layout, cards, and the bespoke surfaces that have no primitive:
  * tabs, progress bar, banners, empty states and table rows. */
 
+/* Fixed brand palette (10.Logo/logo-design-spec.md): blue #36D1DC→#1a6dd4 =
+   normal / primary, orange #FDBB2D→#e67e22 = warning, red #FF5F6D→#c0392b =
+   risk, always in that order. These are the plugin's own colours, not a
+   restatement of the host's: the panel keeps one identity under a light or a
+   dark host, and the host's semantic aliases still carry surfaces and text.
+   The *-ink values are the legible end of each ramp for 11–13px text; the
+   ramps themselves only sit under non-text surfaces (progress, dots, avatars),
+   because white on the cyan top stop is ~1.9:1.
+
+   Declared on :root rather than .root on purpose: the host's Modal is portaled
+   outside the section, and a portaled 简介 footer link still has to find the
+   brand blue. The names are plugin-prefixed, so the document-level scope is
+   inert to everything else. */
+:root{
+  --gal-blue-hi:#36D1DC;
+  --gal-blue-lo:#1a6dd4;
+  --gal-blue-top:#1a78cd;
+  --gal-blue-deep:#155cb8;
+  --gal-blue-ink:#1a6dd4;
+  --gal-warn-ink:#b9630f;
+  --gal-risk-ink:#c0392b;
+  --gal-blue-tint:#eaf4fc;
+  --gal-warn-tint:#fef3e2;
+  --gal-risk-tint:#fdedeb;
+  /* Structure only: hairlines, unselected fills, unselected strokes. They follow
+     the spec's neutral set and never carry brand meaning. */
+  --gal-line:#edf1f4;
+  --gal-rule:#f0f3f6;
+  --gal-fill:#e6ebf0;
+  --gal-stroke:#d5dae0;
+}
+
 .root{
   height:100%;
   display:flex;
@@ -31,8 +63,8 @@
 .tabs,.tabBar{display:flex;gap:2px;border-bottom:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));align-items:flex-end;overflow-x:auto}
 .tab{border:none;background:none;font:inherit;font-size:13px;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));padding:7px 12px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
 .tab:hover{color:var(--dsh-text-primary,var(--dsw-alias-label-primary,#1f2328))}
-.tab:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:-2px}
-.tabActive,.tabOn{color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));border-bottom-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));font-weight:600}
+.tab:focus-visible{outline:2px solid var(--gal-blue-ink);outline-offset:-2px}
+.tabActive,.tabOn{color:var(--gal-blue-ink);border-bottom-color:var(--gal-blue-ink);font-weight:600}
 
 /* Clickable filter chips (the status row and the 甄选 shortcut).
  *
@@ -66,7 +98,7 @@
   height:34px;
   box-sizing:border-box;
   padding:2px;
-  border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#d5d9e0));
+  border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,var(--gal-stroke)));
   border-radius:8px;
   background:var(--dsh-bg-elevated,var(--dsw-alias-bg-layer-1,#fff));
 }
@@ -75,8 +107,10 @@
   top:2px;
   bottom:2px;
   border-radius:6px;
-  background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));
-  box-shadow:0 1px 3px rgba(17,19,26,.3);
+  /* The brand blue's vertical light→dark direction, held inside the range where
+     a white 13px label still clears 4.5:1 (the cyan top stop does not). */
+  background:linear-gradient(180deg,var(--gal-blue-top),var(--gal-blue-deep));
+  box-shadow:0 1px 3px rgba(21,92,184,.35),inset 0 1px 0 rgba(255,255,255,.16);
   /* Positioned from the active segment's measured box; both edges ease, so the
      thumb stretches between two widths of different labels instead of snapping. */
   transition:left .3s cubic-bezier(.22,1,.36,1),width .3s cubic-bezier(.22,1,.36,1),opacity .15s ease;
@@ -106,7 +140,7 @@
 .filterItem:hover:not([aria-pressed='true']){
   color:var(--dsh-text-primary,var(--dsw-alias-label-primary,#1f2328));
 }
-.filterItem:focus-visible{outline:2px solid var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));outline-offset:2px}
+.filterItem:focus-visible{outline:2px solid var(--gal-blue-ink);outline-offset:2px}
 .filterItem[aria-pressed='true']{
   color:var(--dsw-alias-label-primary-foreground,#fff);
   font-weight:600;
@@ -162,7 +196,7 @@
 .selectWrap{position:relative;display:flex;min-width:0;flex:0 1 auto}
 .selectWrap > .select{appearance:none;-webkit-appearance:none;width:100%;height:34px;box-sizing:border-box;padding:0 26px 0 10px}
 .selectChevron{position:absolute;right:10px;top:50%;width:6px;height:6px;margin-top:-4px;border-right:1.5px solid var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));border-bottom:1.5px solid var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));transform:rotate(45deg);pointer-events:none}
-.checkbox{accent-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7))}
+.checkbox{accent-color:var(--gal-blue-lo)}
 
 /* ---------------------------------------------------------------- *
  * Body, sections, generic rows
@@ -199,7 +233,7 @@
    the rectangles identical. `margin-left:auto` keeps the group on the right edge
    if a very narrow card has to wrap it below the links. */
 .cardActionGroup > button{flex:0 0 auto;white-space:nowrap;min-width:56px}
-.divider{height:1px;background:var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));border:0;margin:8px 0}
+.divider{height:1px;background:var(--dsh-border,var(--dsw-alias-border-l2,var(--gal-rule)));border:0;margin:8px 0}
 .muted{color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
 /* State colours MUST come from the host's real aliases.
  *
@@ -219,7 +253,7 @@
 /* The result count shares the card titles' left edge, not the card's: the
    product's own panel sets the number in from the card ring. */
 .countLine{margin-left:12px;font-size:13px;line-height:19px}
-.link{color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));text-decoration:none}
+.link{color:var(--gal-blue-ink);text-decoration:none}
 .link:hover{text-decoration:underline}
 /* A link that sits IN AN ACTION ROW next to host buttons (`Button size="sm"`).
  *
@@ -249,7 +283,7 @@
 .grid,.cardGrid,.pluginGrid,.cardList{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;align-items:start}
 .list{display:flex;flex-direction:column;gap:6px}
 .card,.pluginCard,.listRow{
-  border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));
+  border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,var(--gal-line)));
   border-radius:10px;
   background:var(--dsh-bg-elevated,var(--dsw-alias-bg-layer-1,#fff));
   padding:12px;
@@ -331,13 +365,19 @@
    every card in a row keeps the same one-line head and the band sits on the
    right edge like the panel's. */
 .cardBand{flex:none;margin-left:auto;font-size:12px;line-height:17px;font-weight:500;white-space:nowrap}
-.cardBandS{color:var(--dsh-success,var(--dsw-alias-state-success-primary,#2f9e5f))}
+/* The recommendation grade uses the brand's own reading: the top band is the
+   blue "normal" end, the two lower bands stay neutral so only the best grade
+   spends colour. */
+.cardBandS{color:var(--gal-blue-ink)}
 .cardBandA{color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280))}
 .cardBandC{color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
+/* One status vocabulary across the panel, matching the logo spec's semantics:
+   installed = normal = blue, update/pin = warning = orange, deprecated = risk
+   = red. (This replaced the host green, which had no place in the fixed set.) */
 .stateOk,.stateWarn,.stateDanger{display:inline-flex;flex:none;align-items:center;font-size:11px;line-height:16px;white-space:nowrap}
-.stateOk{color:var(--dsh-success,var(--dsw-alias-state-success-primary,#2f9e5f))}
-.stateWarn{color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#a3670b))}
-.stateDanger{color:var(--dsh-danger,var(--dsw-alias-state-error-primary,#c0392b))}
+.stateOk{color:var(--gal-blue-ink)}
+.stateWarn{color:var(--gal-warn-ink)}
+.stateDanger{color:var(--gal-risk-ink)}
 /* 分类 sits on its own quiet line, the way the panel's own cards read it; the
    full 「（Office / PDF / …）」 label stays in the element's title. */
 .cardCategory{font-size:11px;line-height:17px;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -351,29 +391,32 @@
 .cardShot{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8))}
 .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ellipsis{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7))}
+.avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--gal-blue-top),var(--gal-blue-deep))}
 .swatch{width:16px;height:16px;border-radius:4px;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#d5d9e0));flex-shrink:0}
-.stars{color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#c8871a));white-space:nowrap}
+.stars{color:var(--gal-warn-ink);white-space:nowrap}
 .statusDot{width:7px;height:7px;border-radius:50%;background:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));flex-shrink:0}
-.statusDotOk{background:var(--dsh-success,var(--dsw-alias-state-success-primary,#2f9e5f))}
-.statusDotWarn{background:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#c8871a))}
-.statusDotError{background:var(--dsh-danger,var(--dsw-alias-state-error-primary,#d33a3a))}
+.statusDotOk{background:var(--gal-blue-ink)}
+.statusDotWarn{background:var(--gal-warn-ink)}
+.statusDotError{background:var(--gal-risk-ink)}
 
 /* ---------------------------------------------------------------- *
  * Badges
  * ---------------------------------------------------------------- */
 
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;line-height:16px;padding:1px 7px;border-radius:999px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f0f2f5));color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));white-space:nowrap}
-.badgeOk,.badgeSuccess{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f0f2f5));color:var(--dsh-success,var(--dsw-alias-state-success-primary,#2f9e5f))}
-.badgeWarn{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f0f2f5));color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#a3670b))}
-.badgeDanger,.badgeError{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f0f2f5));color:var(--dsh-danger,var(--dsw-alias-state-error-primary,#c0392b))}
+/* Tints are derived from the same three brand hues instead of the host's
+   semantic fills, so a "compatible / unknown / incompatible" row reads as one
+   family. */
+.badgeOk,.badgeSuccess{background:var(--gal-blue-tint);color:var(--gal-blue-ink)}
+.badgeWarn{background:var(--gal-warn-tint);color:var(--gal-warn-ink)}
+.badgeDanger,.badgeError{background:var(--gal-risk-tint);color:var(--gal-risk-ink)}
 /* A quiet filled pill, like the panel's 「兼容性未知」: an outline made every
    second tag on the row read as a control. */
 .badgeMuted{color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
 /* Rank number in the 「推荐」 view. Tabular figures keep `#1` and `#20` the same
  * width, so a list of ranked cards does not jitter; the accent colour marks it as
  * position rather than metadata. */
-.rankBadge{flex:none;font-variant-numeric:tabular-nums;font-size:11px;line-height:16px;font-weight:600;color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));white-space:nowrap}
+.rankBadge{flex:none;font-variant-numeric:tabular-nums;font-size:11px;line-height:16px;font-weight:600;color:var(--gal-blue-ink);white-space:nowrap}
 .tag{display:inline-flex;align-items:center;font-size:11px;line-height:16px;padding:0 6px;border-radius:6px;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280))}
 
 /* ---------------------------------------------------------------- *
@@ -381,7 +424,11 @@
  * ---------------------------------------------------------------- */
 
 .banner,.bannerInfo,.bannerWarn,.bannerError{display:flex;align-items:center;gap:8px;border-radius:8px;padding:8px 12px;font-size:12px;line-height:18px;margin:0;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8))}
-.bannerWarn{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8));border-color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#a3670b));color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#a3670b))}
+/* Banners stay on the host's semantics on purpose: the neutral layer and the
+   state accent are the host's theme-aware pair, and `tests/host-contract.test.ts`
+   pins that so a dark host never gets a light-theme wash. The brand layer owns
+   cards, controls and inline state words instead. */
+.bannerWarn{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8));border-color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#b9630f));color:var(--dsh-warning,var(--dsw-alias-state-warn-primary,#b9630f))}
 .bannerError{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8));border-color:var(--dsh-danger,var(--dsw-alias-state-error-primary,#c0392b));color:var(--dsh-danger,var(--dsw-alias-state-error-primary,#c0392b))}
 /* A banner with a trailing control: the TEXT yields, the button does not.
  *
@@ -400,9 +447,11 @@
 .emptyHint{font-size:12px;line-height:19px}
 
 .progress{display:flex;flex-direction:column;gap:4px;min-width:0}
-.progressTrack{height:4px;border-radius:999px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#e9ecf1));overflow:hidden}
-.progressBar{height:100%;border-radius:999px;background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));transition:width .2s ease}
-.progressFill{height:100%;border-radius:999px;background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));transition:width .2s ease}
+.progressTrack{height:4px;border-radius:999px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,var(--gal-fill)));overflow:hidden}
+/* The one place the full brand ramp runs unbroken: nothing sits on the fill, so
+   it can open at the cyan stop the icon uses and close at the deep blue. */
+.progressBar{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gal-blue-hi),var(--gal-blue-lo));transition:width .2s ease}
+.progressFill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gal-blue-hi),var(--gal-blue-lo));transition:width .2s ease}
 .progressText{font-size:11px;line-height:17px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* The running command's own output.
  *
@@ -412,7 +461,7 @@
 .progressLog{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:16px;margin:0;padding:6px 8px;border-radius:6px;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f5f6f8));color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));white-space:pre-wrap;word-break:break-word;max-height:96px;overflow:auto}
 
 .spinnerWrap{display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
-.spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--dsh-border,var(--dsw-alias-border-l2,#d5d9e0));border-top-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));animation:galaxy-spin .8s linear infinite;flex-shrink:0}
+.spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--dsh-border,var(--dsw-alias-border-l2,var(--gal-stroke)));border-top-color:var(--gal-blue-lo);animation:galaxy-spin .8s linear infinite;flex-shrink:0}
 @keyframes galaxy-spin{to{transform:rotate(360deg)}}
 
 /* ---------------------------------------------------------------- *
@@ -447,8 +496,8 @@
 .opsActions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}
 .opsActions > button{flex:0 0 auto;white-space:nowrap;border-radius:8px}
 .opsProgress{display:flex;align-items:center;gap:8px}
-.opsTrack{flex:1;height:6px;border-radius:999px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f0f2f5));overflow:hidden}
-.opsFill{display:block;height:100%;border-radius:999px;background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));transition:width .2s ease}
+.opsTrack{flex:1;height:6px;border-radius:999px;background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,var(--gal-fill)));overflow:hidden}
+.opsFill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gal-blue-hi),var(--gal-blue-lo));transition:width .2s ease}
 .opsPercent{font-size:12px;line-height:18px;min-width:36px;text-align:right;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));font-variant-numeric:tabular-nums}
 .opsDetail{font-size:12px;line-height:18px;margin:0;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));overflow-wrap:anywhere}
 .opsEmpty{display:flex;flex-direction:column;gap:4px;padding:4px 0;font-size:12px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
@@ -460,6 +509,16 @@
 .modalHead{display:flex;align-items:center;gap:8px;padding-bottom:8px}
 .modalTitle{font-size:14px;font-weight:600;margin:0}
 .modalBody{font-size:13px;line-height:20px;min-height:0;overflow:auto;max-height:60vh;display:flex;flex-direction:column;gap:10px}
+/* 简介 dialog: the prose is the site's, so let it read like a paragraph. */
+.introLoading{display:flex;align-items:center;gap:8px;font-size:12px;line-height:18px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
+.introText{font-size:13px;line-height:22px;margin:0;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));white-space:pre-wrap;overflow-wrap:anywhere}
+.introError{font-size:12px;line-height:18px;color:var(--dsh-danger,var(--dsw-alias-state-error-primary,#c0392b))}
+.introEmpty{font-size:12px;line-height:18px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1))}
+/* The host modal's close glyph is 14px inside a 28px hit area; on this prose
+   dialog the X read smaller than the title. Keep the host's button, give its
+   glyph the extra few pixels. */
+.introModal [class*='close']{padding:0}
+.introModal [class*='close'] svg{width:18px;height:18px;flex:none}
 .modalFooter,.footer{display:flex;align-items:center;gap:8px;padding-top:10px;flex-wrap:wrap}
 .footer{margin-top:auto;border-top:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#e5e7eb));padding:10px 0 0}
 
@@ -473,7 +532,7 @@
 .pagination{display:flex;align-items:center;gap:4px;justify-content:center;padding:8px 0}
 .pageButton{border:1px solid transparent;background:none;font:inherit;font-size:12px;min-width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280))}
 .pageButton:hover{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#f0f2f5))}
-.pageActive{background:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7));color:#fff}
+.pageActive{background:var(--gal-blue-lo);color:#fff}
 
 /* ---------------------------------------------------------------- *
  * Crash recovery panel
@@ -484,7 +543,7 @@
 .crashHint{font-size:12px;line-height:19px;color:var(--dsh-text-secondary,var(--dsw-alias-label-secondary,#6b7280));white-space:pre-wrap;max-width:70ch}
 .crashActions{display:flex;gap:8px;flex-wrap:wrap}
 .crashButton{font:inherit;font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;border:1px solid var(--dsh-border,var(--dsw-alias-border-l2,#d5d9e0));background:var(--dsh-bg-elevated,var(--dsw-alias-bg-layer-1,#fff));color:inherit}
-.crashButton:hover{border-color:var(--dsh-accent,var(--dsw-alias-brand-primary,#4f6ef7))}
+.crashButton:hover{border-color:var(--gal-blue-ink)}
 .crashDetails{font-size:11px;color:var(--dsh-text-tertiary,var(--dsw-alias-label-tertiary,#8b93a1));max-width:100%}
 .crashSummary{cursor:pointer}
 .crashPre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;max-height:320px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:17px}
@@ -499,11 +558,25 @@
   .overlayPanel{width:100%;max-height:88vh}
 }
 
-/* The host tokens already flip with the theme; these overrides only touch
- * surfaces this sheet paints with literals (scrim, shadow, code blocks) so a
- * dark OS does not get a light-looking scrim behind a dark host. */
-@media (prefers-color-scheme:dark){
-  .overlay,.overlayBackdrop{background:rgba(0,0,0,.5)}
-  .overlayPanel{box-shadow:0 12px 40px rgba(0,0,0,.5)}
-  .code,.pre{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#22262c))}
+/* Dark: the host flips its tokens with `body[data-ds-dark-theme]`
+ * (design-platform.css), not with the OS media query — a user who picks Light
+ * inside the app on a dark desktop must still get the light panel. So the
+ * overrides that touch literals (scrim, shadow, code blocks) and the brand inks
+ * follow that same attribute switch.
+ *
+ * The brand inks move to the bright end of each ramp so 11–13px text keeps its
+ * contrast on a dark panel; the fills keep the deep end under white labels,
+ * and the badge tints become translucent instead of washed-out. */
+body[data-ds-dark-theme]{
+  --gal-blue-ink:#36D1DC;
+  --gal-warn-ink:#FDBB2D;
+  --gal-risk-ink:#FF5F6D;
+  --gal-blue-tint:rgba(54,209,220,.14);
+  --gal-warn-tint:rgba(253,187,45,.14);
+  --gal-risk-tint:rgba(255,95,109,.14);
 }
+body[data-ds-dark-theme] .overlay,
+body[data-ds-dark-theme] .overlayBackdrop{background:rgba(0,0,0,.5)}
+body[data-ds-dark-theme] .overlayPanel{box-shadow:0 12px 40px rgba(0,0,0,.5)}
+body[data-ds-dark-theme] .code,
+body[data-ds-dark-theme] .pre{background:var(--dsh-bg-secondary,var(--dsw-alias-bg-layer-2,#22262c))}

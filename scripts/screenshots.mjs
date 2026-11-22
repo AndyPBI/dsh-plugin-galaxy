@@ -73,7 +73,7 @@ const VIEWS = [
   { id: 'all', file: '01-market-all.png', title: '全部：卡片网格 + 搜索/筛选/排序' },
   { id: 'recommended', file: '02-recommended.png', title: '推荐：官网排名前 20，卡片带 #名次与分档' },
   { id: 'installed', file: '03-installed.png', title: '已安装：启停/更新/卸载/备注/收藏' },
-  { id: 'detail', file: '04-detail-modal.png', title: '插件详情：评分构成、来源、评论入口' },
+  { id: 'detail', file: '04-detail-modal.png', title: '插件简介：官网正文、来源与官网入口' },
 ]
 
 /* ------------------------------------------------------------------ *
@@ -138,6 +138,39 @@ async function captureFixtures() {
   if (fixtures.installed === undefined) fixtures.installed = FALLBACK_INSTALLED
   if (fixtures.updates === undefined) fixtures.updates = FALLBACK_UPDATES
   if (fixtures.status === undefined) fixtures.status = FALLBACK_STATUS
+  /*
+   * The 简介 dialog reads the operator site's own catalog. In production the
+   * plugin's server makes that call (the site has no CORS headers); here the
+   * screenshot script captures one row for the detail image.
+   */
+  const siteBase = (fixtures.registry && fixtures.registry.siteUrlBase) || 'https://www.yhaigc.cn'
+  try {
+    const siteResponse = await fetch(`${siteBase}/assets/plugins/catalog.json`, { signal: AbortSignal.timeout(8000) })
+    if (!siteResponse.ok) throw new Error(`HTTP ${String(siteResponse.status)}`)
+    const site = await siteResponse.json()
+    const plugins = Array.isArray(site.plugins) ? site.plugins : []
+    const row = plugins.reduce((best, candidate) => {
+      if (candidate === null || typeof candidate !== 'object') return best
+      return best === undefined || (candidate.score ?? -1) > (best.score ?? -1) ? candidate : best
+    }, undefined)
+    if (row !== undefined) {
+      fixtures.intro = {
+        intro: {
+          key: row.key,
+          name: row.name,
+          description: row.desc,
+          descriptionFull: row.descFull,
+          descriptionEn: row.descEn,
+        },
+      }
+      console.log(`      intro: ${String(row.name)} from ${siteBase}`)
+    }
+  } catch (error) {
+    console.log(`      intro: site capture failed (${error.message}); using the fallback`)
+  }
+  if (fixtures.intro === undefined) {
+    fixtures.intro = { intro: { key: 'liustack/modsearch', name: 'modsearch', descriptionFull: '官网简介暂时不可用。' } }
+  }
   console.log(`      fixtures: ${String(live)}/${String(FIXTURE_ROUTES.length)} live from ${host}`)
   return fixtures
 }
@@ -321,11 +354,11 @@ window.__DSH_BOOT__ = () => {
     }
     if (view === 'detail') {
       const open = [...document.querySelectorAll('button')]
-        .find(candidate => (candidate.textContent ?? '').includes(t('commentsOpen')))
-      if (open === undefined) events.push('comments button not found')
+        .find(candidate => (candidate.textContent ?? '').includes(t('introOpen')))
+      if (open === undefined) events.push('intro button not found')
       else open.click()
       await settle()
-      await settle()
+      await new Promise(resolve => setTimeout(resolve, 300))
     }
     // "ready" means the grid is on screen, not that the effect ran: otherwise
     // the capture races the data round trip and the image shows an empty market.

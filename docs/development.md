@@ -1,5 +1,7 @@
 # 开发与发版门禁
 
+> 新插件从零到发布的通用骨架、宿主契约、**UI/UX（以 stageshow 技能为准）**、验收与踩坑清单见 [`plugin-development-guide.md`](./plugin-development-guide.md)。
+
 > README 只保留安装与使用；开发命令、门禁与截图工具链放在这里，便于维护者查阅。
 
 ## 命令

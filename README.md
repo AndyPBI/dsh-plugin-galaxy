@@ -177,6 +177,7 @@ dsh plugin --profile web add ./dsh-plugin-galaxy-0.1.34.tgz
 
 | 想了解 | 看这里 |
 |---|---|
+| **新插件开发通用规范**（骨架、宿主契约、UI/UX via stageshow、踩坑清单） | [`docs/plugin-development-guide.md`](docs/plugin-development-guide.md) |
 | 服务端契约：路由、对象、规则、状态文件、错误语义 | [`docs/implementation-contract.md`](docs/implementation-contract.md) |
 | 客户端契约：槽位、组件结构、文案与布局约束 | [`docs/client-contract.md`](docs/client-contract.md) |
 | 与官网页面的联动（目录格式、推荐块、深链） | [`docs/site-linkage.md`](docs/site-linkage.md) |

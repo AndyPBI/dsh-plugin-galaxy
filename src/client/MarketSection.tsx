@@ -54,8 +54,7 @@ import type {
   ThemeStore,
   Translate,
 } from './market-data.ts'
-import { CommentsModal } from './CommentsModal.tsx'
-import { commentCount } from './comments.ts'
+import { IntroModal } from './IntroModal.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
 import { bucketOf } from './operations.ts'
 import { OperationsPanel } from './OperationsPanel.tsx'
@@ -248,7 +247,7 @@ interface MarketActions {
   assignGroup(name: string, group: string): void
   favorite(url: string, favorited: boolean): void
   openChangelog(name: string): void
-  openComments(plugin: RegistryPlugin): void
+  openIntro(plugin: RegistryPlugin): void
   activateTheme(name: string): void
 }
 
@@ -787,9 +786,6 @@ function PluginCard(props: {
    * market is the deliberate flow on the settings card.
    */
   const isSelf = plugin.name === NS || installed?.name === NS
-  // The catalog's free-form `comments` blob is the only comment source, so the
-  // count here is what the dialog will show — parsed with the same function.
-  const comments = commentCount(plugin.comments ?? '')
   const status = compatibility?.status
   const compatibilityLabel = status === 'compatible'
     ? t('compatCompatible')
@@ -898,16 +894,15 @@ function PluginCard(props: {
               {t('siteOpen')}
             </a>
           )}
-          {row.fromCatalog && (
-            // A text action, not a ghost button: its host padding made the foot
-            // too wide to hold the links and the three lifecycle buttons on one
-            // line at the settings dialog's width.
+          {plugin.siteUrl !== undefined && (
+            // The site's own prose for this row, shown in the 简介 dialog and
+            // fetched from the operator site through the plugin's server.
             <button
               type='button'
               className={`${css.link} ${css.actionLink}`}
-              onClick={() => actions.openComments(plugin)}
+              onClick={() => actions.openIntro(plugin)}
             >
-              {comments > 0 ? `${t('commentsOpen')} (${String(comments)})` : t('commentsOpen')}
+              {t('introOpen')}
             </button>
           )}
           <span className={css.spacer} />
@@ -1032,7 +1027,9 @@ function InstalledRow(props: {
           {plugin.bundle && <span className={`${css.badge} ${css.badgeMuted}`}>{t('bundleBadge')}</span>}
           {!enabled && <span className={`${css.badge} ${css.badgeWarn}`}>{t('disabledBadge')}</span>}
           {update?.updateAvailable === true && (
-            <span className={`${css.badge} ${css.badgeOk}`}>{t('updateAvailableBadge')}</span>
+            // Same orange as the card's 可更新 word: an update is a warning,
+            // not a success, and the two surfaces must agree.
+            <span className={`${css.badge} ${css.badgeWarn}`}>{t('updateAvailableBadge')}</span>
           )}
         </div>
         <span className={`${css.muted} ${css.ellipsis}`}>{plugin.spec}</span>
@@ -1513,7 +1510,7 @@ export function MarketSection(props: {
     state: 'loading' | 'ready' | 'fail'
     payload: ChangelogPayload | null
   } | null>(null)
-  const [commentsFor, setCommentsFor] = useState<RegistryPlugin | null>(null)
+  const [introFor, setIntroFor] = useState<RegistryPlugin | null>(null)
   const [rollbackFor, setRollbackFor] = useState<OperationRecord | null>(null)
   const [opsOpen, setOpsOpen] = useState(false)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
@@ -1825,7 +1822,7 @@ export function MarketSection(props: {
       void mutate(`favorite:${url}`, () => favoriteUrl(url, favorited), 'favoriteFailed')
     },
     openChangelog,
-    openComments: plugin => setCommentsFor(plugin),
+    openIntro: plugin => setIntroFor(plugin),
     activateTheme: name => {
       void mutate(`theme:${name}`, async () => {
         try {
@@ -2734,11 +2731,12 @@ export function MarketSection(props: {
         </div>
       </Modal>
 
-      <CommentsModal
+      <IntroModal
         t={t}
-        open={commentsFor !== null}
-        plugin={commentsFor}
-        onClose={() => setCommentsFor(null)}
+        open={introFor !== null}
+        plugin={introFor}
+        english={english}
+        onClose={() => setIntroFor(null)}
       />
 
       <SnapshotPanel

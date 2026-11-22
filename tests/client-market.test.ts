@@ -630,6 +630,7 @@ describe('Discover — official website links', () => {
           : plugin)
         return json({ registry: { plugins: withLinks, count: withLinks.length } })
       }
+      if (url.includes('/intro')) return json({ intro: { key: 'wt/dsh-worktable', name: 'dsh-worktable', descriptionEn: 'The site intro for worktable.' } })
       if (url.includes('/installed')) return json(INVENTORY)
       if (url.includes('/updates')) return json([])
       if (url.includes('/discovery-compatibility')) return json({ results: [] })
@@ -667,6 +668,17 @@ describe('Discover — official website links', () => {
     await flush()
     const link = host.querySelector('a[href^="https://www.yhaigc.cn/#/ai/p/"]')
     expect(link?.tagName).toBe('A')
+  })
+
+  it('opens the site intro from the 简介 action', async () => {
+    const host = await mountWithSiteLinks()
+    await flush()
+    const intro = [...host.querySelectorAll('button')]
+      .find(button => (button.textContent ?? '').trim() === 'Intro')
+    expect(intro).toBeDefined()
+    intro?.click()
+    await flush()
+    expect(host.textContent).toContain('The site intro for worktable.')
   })
 })
 

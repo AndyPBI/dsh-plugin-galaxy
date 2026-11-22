@@ -18,10 +18,11 @@ import { proxyHint } from '../core/net.ts'
 import type { GalaxyRuntime } from '../core/runtime.ts'
 import type { HostCompatibility } from '../core/types.ts'
 import { hostVersionInfo } from '../domain/compatibility.ts'
-import { linkedRegistryFor } from '../domain/site.ts'
+import { linkedRegistryFor, siteBaseFor } from '../domain/site.ts'
 import type { DiscoveryManifestIndex } from '../domain/discovery-compatibility.ts'
 import { instanceFor } from '../domain/discovery-compatibility.ts'
 import { CatalogLoadError, loadRegistry } from '../domain/registry.ts'
+import { findSiteIntro } from '../domain/site-intro.ts'
 import { NPM_NAME_RE } from '../domain/sources.ts'
 import { BASE_PATH } from './host.ts'
 import type { Router } from './router.ts'
@@ -76,6 +77,46 @@ export function registerCatalogRoutes(router: Router, runtime: GalaxyRuntime): v
       const reason = error instanceof CatalogLoadError ? error.reason : message
       logEvent('warn', 'registry', `catalog fetch failed: ${reason}`)
       sendJson(response, 502, { error: message, reason, proxyHint: proxyHint() })
+    }
+  })
+
+  /**
+   * Get /dsh-galaxy/intro — the operator site's intro for one plugin.
+   *
+   * The card's 简介 dialog asks for this on open. The site catalog is cached
+   * for ten minutes; the lookup is by the site's own `owner/name` key, with the
+   * plugin name as the fallback for installed-only rows that predate keys.
+   */
+  router.get(`${BASE_PATH}/intro`, async ({ response, url }) => {
+    const key = (url.searchParams.get('key') ?? '').trim()
+    const name = (url.searchParams.get('name') ?? '').trim()
+    if (key === '' && name === '') {
+      sendJson(response, 400, { error: 'key or name is required' })
+      return
+    }
+    if (key.length > 512 || name.length > 512) {
+      sendJson(response, 400, { error: 'key and name must be at most 512 characters' })
+      return
+    }
+    const resolved = siteBaseFor(runtime)
+    if (resolved === undefined) {
+      sendJson(response, 404, { error: 'no operator site is configured for this profile' })
+      return
+    }
+    try {
+      const intro = await findSiteIntro(resolved.base, {
+        ...(key === '' ? {} : { key }),
+        ...(name === '' ? {} : { name }),
+      })
+      if (intro === undefined) {
+        sendJson(response, 404, { error: 'the operator site has no intro for this plugin' })
+        return
+      }
+      sendJson(response, 200, { intro, siteUrlBase: resolved.base })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logEvent('warn', 'intro', `site intro fetch failed: ${message}`)
+      sendJson(response, 502, { error: message, proxyHint: proxyHint() })
     }
   })
 

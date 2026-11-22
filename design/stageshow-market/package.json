@@ -1,0 +1,6 @@
+{
+  "name": "stageshow-market-mock",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite" }
+}

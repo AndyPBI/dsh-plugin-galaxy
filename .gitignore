@@ -18,6 +18,9 @@ site/index.html.bak
 /client/
 /.layout-probe/
 
+# stageshow 彩排：node_modules 是指向技能安装目录的软链，不进仓库
+/design/stageshow-market/node_modules
+
 # 内部工作文档：只在本地保留，不进仓库
 /plantodo.md
 /docs/pre-install-audit.md

@@ -1,0 +1,204 @@
+/* The panel as the product draws it: 13px labels, 999px status pills, a hairline
+   card ring, and the near-black accent the host renders for a primary action. */
+
+.gm2-stage { background: #f5f6f8; }
+
+/* `className` lands on the fit wrapper; the box that draws and crops is the
+   inner `.ss-stage`, so the panel's bleed has to be clipped there. */
+.gm2-stage .ss-stage { background: #f5f6f8; overflow: hidden; }
+
+.gm2-panel .ss-window__bar { display: none; }
+
+.gm2-panel {
+  position: absolute;
+  left: 44px;
+  top: 44px;
+  width: 772px;
+  height: 500px;
+  border: 1px solid #e6e8ee;
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 10px 30px rgba(17, 19, 26, 0.07), 0 1px 2px rgba(17, 19, 26, 0.04);
+  font-size: 13px;
+  color: #1a1d23;
+}
+
+.gm2-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 14px 18px 0;
+  overflow: hidden;
+}
+
+/* ---------- toolbar ---------- */
+
+.gm2-toolbar { display: flex; flex-direction: column; gap: 10px; }
+
+.gm2-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.gm2-grow { flex: 1 1 auto; }
+
+.gm2-glyph { color: #9aa1ad; flex: none; }
+
+.gm2-search {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #e3e5ea;
+  border-radius: 8px;
+}
+
+.gm2-ph { font-size: 13px; color: #a2a8b3; }
+
+/* the slider */
+.gm2-slider {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: #f1f2f4;
+}
+
+.gm2-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 999px;
+  background: #14161b;
+  box-shadow: 0 1px 3px rgba(17, 19, 26, 0.3);
+  transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gm2-lab { white-space: nowrap; }
+
+.gm2-seg {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gm2-seg[data-on] { color: #ffffff; font-weight: 600; }
+
+.gm2-count { font-size: 11px; color: rgba(107, 114, 128, 0.72); }
+.gm2-seg[data-on] .gm2-count { color: rgba(255, 255, 255, 0.72); }
+
+.gm2-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e3e5ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3d434e;
+  font-size: 12px;
+  white-space: nowrap;
+  flex: none;
+}
+
+/* ---------- count + grid ---------- */
+
+.gm2-total {
+  margin: 0;
+  /* The count line shares the card titles' left edge, not the panel's. */
+  margin: 0 0 0 12px;
+  padding-top: 2px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.gm2-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  align-content: start;
+  align-items: start;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 54px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 54px), transparent 100%);
+}
+
+.gm2-card.ss-card {
+  border-radius: 12px;
+  border-color: #e7e8ec;
+  animation: gm2-in 0.26s ease both;
+}
+
+@keyframes gm2-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.gm2-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+.gm2-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1d23;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm2-ok { display: inline-flex; align-items: center; height: 14px; line-height: 14px; gap: 5px; font-size: 11px; color: #1a7f5a; }
+.gm2-warn { font-size: 11px; color: #b26a00; }
+.gm2-score { font-size: 12px; font-weight: 500; color: #1a7f5a; white-space: nowrap; }
+
+.gm2-cat { font-size: 11px; color: #6b7280; }
+
+.gm2-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #6b7280; }
+.gm2-star { display: inline-flex; align-items: center; height: 14px; line-height: 14px; gap: 5px; color: #b26a00; }
+.gm2-muted { color: #8b919c; }
+.gm2-pill {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.gm2-foot { display: flex; align-items: center; gap: 10px; }
+.gm2-link { font-size: 11px; color: #3d434e; }
+
+
+/* Narrow: the panel is 372px inside a 400px stage, the grid drops to one column
+   and the six segments give up their counts and min-width to fit the track. */
+@media (max-width: 620px) {
+  .gm2-panel {
+    left: 14px;
+    top: 14px;
+    width: 342px;
+    height: 420px;
+  }
+
+  .gm2-body { padding: 12px 14px 0; }
+
+  .gm2-line { flex-wrap: wrap; row-gap: 8px; }
+
+  .gm2-slider { flex: 1 1 100%; overflow-x: auto; }
+
+  .gm2-seg { font-size: 11px; padding: 0 8px; }
+
+  .gm2-count { display: none; }
+}
